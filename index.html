@@ -156,6 +156,8 @@
   .card-tile .actions { display: flex; gap: 6px; padding: 0 12px 12px; }
   .card-tile .actions button { flex: 1; padding: 7px 8px; font-size: 12px; }
   .empty-state { text-align: center; padding: 60px 20px; color: var(--text-dim); }
+  .card-tile.hidden-card { opacity: 0.55; }
+  .card-tile.hidden-card .thumb img { filter: grayscale(60%); }
 
   /* Mobile: force compact multi-column grids instead of one huge card per row */
   @media (max-width: 480px) {
@@ -297,6 +299,10 @@
       </p>
       <div class="toolbar">
         <input type="text" id="cat-search" placeholder="Rechercher dans le catalogue..." />
+        <label style="display:flex; align-items:center; gap:6px; font-size:13px; color:var(--text-dim); white-space:nowrap; cursor:pointer;">
+          <input type="checkbox" id="cat-show-hidden" />
+          Afficher les cartes masquées
+        </label>
       </div>
       <div class="card-grid" id="catalogue-grid"></div>
     </section>
@@ -397,6 +403,7 @@ let currentUser = null;
 let cardsCatalogue = [];   // confirmed catalogue rows only
 let cardsPendingReview = []; // review_status = 'pending_review' rows
 let collectionItems = [];  // full collection_items rows (joined with cards)
+let hiddenCardIds = new Set(); // card ids the current user has hidden from the catalogue
 let editingItemId = null;  // null = create mode
 
 /* ---------- Toast ---------- */
@@ -457,7 +464,7 @@ document.querySelectorAll("nav.tabs .tab").forEach(btn => {
 
 /* ---------- Data loading ---------- */
 async function loadAll() {
-  await Promise.all([loadCatalogue(), loadPendingReview(), loadCollection()]);
+  await Promise.all([loadCatalogue(), loadPendingReview(), loadCollection(), loadHiddenCards()]);
   renderDashboard();
   renderCollectionGrid();
   renderWishlistGrid();
@@ -471,6 +478,29 @@ async function loadCatalogue() {
   const { data, error } = await sb.from("cards").select("*").eq("review_status", "confirmed").order("game").order("set_name");
   if (error) { toast("Erreur chargement catalogue: " + error.message, "err"); return; }
   cardsCatalogue = data || [];
+}
+
+async function loadHiddenCards() {
+  if (!currentUser) { hiddenCardIds = new Set(); return; }
+  const { data, error } = await sb.from("hidden_cards").select("card_id").eq("user_id", currentUser.id);
+  if (error) { toast("Erreur chargement cartes masquées: " + error.message, "err"); return; }
+  hiddenCardIds = new Set((data || []).map(r => r.card_id));
+}
+
+async function hideCard(cardId) {
+  const { error } = await sb.from("hidden_cards").insert({ user_id: currentUser.id, card_id: cardId });
+  if (error) { toast("Erreur: " + error.message, "err"); return; }
+  hiddenCardIds.add(cardId);
+  toast("Carte masquée. Tu peux la ré-afficher via \"Afficher les cartes masquées\".", "ok");
+  renderCatalogueGrid();
+}
+
+async function unhideCard(cardId) {
+  const { error } = await sb.from("hidden_cards").delete().eq("user_id", currentUser.id).eq("card_id", cardId);
+  if (error) { toast("Erreur: " + error.message, "err"); return; }
+  hiddenCardIds.delete(cardId);
+  toast("Carte réaffichée dans le catalogue.", "ok");
+  renderCatalogueGrid();
 }
 
 async function loadPendingReview() {
@@ -621,23 +651,30 @@ async function renderGrid(containerId, items, isCollectionItem) {
 
 function renderCatalogueGrid() {
   const search = document.getElementById("cat-search").value.toLowerCase();
+  const showHidden = document.getElementById("cat-show-hidden").checked;
   let cards = cardsCatalogue;
   if (search) cards = cards.filter(c =>
     (c.card_name || "").toLowerCase().includes(search) ||
     (c.set_name || "").toLowerCase().includes(search) ||
     (c.card_number || "").toLowerCase().includes(search)
   );
+  const hiddenCount = cards.filter(c => hiddenCardIds.has(c.id)).length;
+  if (!showHidden) cards = cards.filter(c => !hiddenCardIds.has(c.id));
   const ownedCardIds = new Set(collectionItems.filter(i => i.status === "owned" && i.card_id).map(i => i.card_id));
   const el = document.getElementById("catalogue-grid");
+  const hiddenNote = hiddenCount > 0
+    ? `<div style="grid-column:1/-1; font-size:12px; color:var(--text-dim); margin-bottom:4px;">${hiddenCount} carte${hiddenCount > 1 ? "s" : ""} masquée${hiddenCount > 1 ? "s" : ""}${showHidden ? "" : " (coche \"Afficher les cartes masquées\" pour les voir)"}.</div>`
+    : "";
   if (cards.length === 0) {
-    el.innerHTML = '<div class="empty-state" style="grid-column:1/-1;">Aucune carte au catalogue pour cette recherche.</div>';
+    el.innerHTML = hiddenNote + '<div class="empty-state" style="grid-column:1/-1;">Aucune carte au catalogue pour cette recherche.</div>';
     return;
   }
-  el.innerHTML = "";
+  el.innerHTML = hiddenNote;
   cards.forEach(c => {
     const owned = ownedCardIds.has(c.id);
+    const isHidden = hiddenCardIds.has(c.id);
     const tile = document.createElement("div");
-    tile.className = "card-tile";
+    tile.className = "card-tile" + (isHidden ? " hidden-card" : "");
     tile.innerHTML = `
       <div class="thumb"><div class="placeholder">${c.official_image_url ? "" : "Pas d'image"}</div>${c.official_image_url ? `<img src="${c.official_image_url}" />` : ""}</div>
       <div class="info">
@@ -646,15 +683,25 @@ function renderCatalogueGrid() {
         <div class="tags">
           ${c.rarity ? `<span class="tag">${escapeHtml(c.rarity)}</span>` : ""}
           <span class="badge ${owned ? "owned" : "missing"}">${owned ? "Possédée" : "Manquante"}</span>
+          ${isHidden ? `<span class="tag">Masquée</span>` : ""}
         </div>
       </div>
       <div class="actions">
         ${owned ? "" : `<button class="primary" data-quickadd="${c.id}">+ Ajouter</button>`}
+        ${isHidden
+          ? `<button class="secondary" data-unhide="${c.id}">Réafficher</button>`
+          : `<button class="secondary" data-hide="${c.id}">Masquer</button>`}
       </div>`;
     el.appendChild(tile);
   });
   el.querySelectorAll("[data-quickadd]").forEach(btn => {
     btn.onclick = () => openModal(null, btn.dataset.quickadd);
+  });
+  el.querySelectorAll("[data-hide]").forEach(btn => {
+    btn.onclick = () => hideCard(btn.dataset.hide);
+  });
+  el.querySelectorAll("[data-unhide]").forEach(btn => {
+    btn.onclick = () => unhideCard(btn.dataset.unhide);
   });
 }
 
@@ -720,6 +767,7 @@ document.getElementById("col-filter-game").onchange = renderCollectionGrid;
 document.getElementById("col-filter-condition").onchange = renderCollectionGrid;
 document.getElementById("wish-search").oninput = renderWishlistGrid;
 document.getElementById("cat-search").oninput = renderCatalogueGrid;
+document.getElementById("cat-show-hidden").onchange = renderCatalogueGrid;
 
 /* ---------- Quick check "do I own this" ---------- */
 document.getElementById("qc-input").oninput = (e) => {
