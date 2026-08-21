@@ -159,6 +159,41 @@
   .card-tile.hidden-card { opacity: 0.55; }
   .card-tile.hidden-card .thumb img { filter: grayscale(60%); }
 
+  /* Catalogue hierarchy: Game -> Extension/Series -> Cards */
+  #catalogue-grid.hierarchy-root { display: block; }
+  .game-section { margin-bottom: 22px; }
+  .game-header {
+    display: flex; align-items: center; gap: 12px;
+    padding: 12px 14px;
+    background: var(--card); border: 1px solid var(--border); border-radius: var(--radius);
+    cursor: pointer; user-select: none;
+  }
+  .game-header:hover { border-color: var(--orange-dim); }
+  .game-header img.logo { width: 44px; height: 44px; border-radius: 10px; object-fit: cover; flex-shrink: 0; }
+  .game-header .ginfo { flex: 1; min-width: 0; }
+  .game-header .gname { font-weight: 700; font-size: 15px; }
+  .game-header .gsub { font-size: 12px; color: var(--text-dim); }
+  .game-header .gcount { font-size: 12px; color: var(--text-dim); white-space: nowrap; }
+  .game-header .chevron { color: var(--text-dim); transition: transform .15s ease; font-size: 12px; }
+  .game-header.collapsed .chevron { transform: rotate(-90deg); }
+  .game-body { padding: 14px 0 0 6px; }
+  .game-body.collapsed { display: none; }
+  .game-body .empty-state { padding: 18px; font-size: 12.5px; }
+
+  .set-section { margin: 0 0 14px 14px; border-left: 2px solid var(--border); padding-left: 14px; }
+  .set-header {
+    display: flex; align-items: center; gap: 10px;
+    padding: 7px 10px; border-radius: 8px; cursor: pointer; user-select: none;
+  }
+  .set-header:hover { background: rgba(255,255,255,0.04); }
+  .set-header img.logo { width: 30px; height: 30px; border-radius: 7px; object-fit: cover; flex-shrink: 0; }
+  .set-header .sname { font-weight: 600; font-size: 13px; flex: 1; }
+  .set-header .scount { font-size: 11px; color: var(--text-dim); white-space: nowrap; }
+  .set-header .chevron { color: var(--text-dim); transition: transform .15s ease; font-size: 11px; }
+  .set-header.collapsed .chevron { transform: rotate(-90deg); }
+  .set-body { margin-top: 10px; }
+  .set-body.collapsed { display: none; }
+
   /* Mobile: force compact multi-column grids instead of one huge card per row */
   @media (max-width: 480px) {
     main { padding: 14px; }
@@ -304,7 +339,7 @@
           Afficher les cartes masquées
         </label>
       </div>
-      <div class="card-grid" id="catalogue-grid"></div>
+      <div id="catalogue-grid" class="hierarchy-root"></div>
     </section>
 
     <!-- REVIEW QUEUE -->
@@ -404,6 +439,10 @@ let cardsCatalogue = [];   // confirmed catalogue rows only
 let cardsPendingReview = []; // review_status = 'pending_review' rows
 let collectionItems = [];  // full collection_items rows (joined with cards)
 let hiddenCardIds = new Set(); // card ids the current user has hidden from the catalogue
+let gamesList = [];        // public.games rows (top level of the hierarchy)
+let gameSetsList = [];     // public.game_sets rows (series/extension level)
+let expandedGames = new Set(); // game slugs currently expanded in the catalogue tree
+let expandedSets = new Set();  // `${game_slug}::${set_name}` keys currently expanded
 let editingItemId = null;  // null = create mode
 
 /* ---------- Toast ---------- */
@@ -464,7 +503,7 @@ document.querySelectorAll("nav.tabs .tab").forEach(btn => {
 
 /* ---------- Data loading ---------- */
 async function loadAll() {
-  await Promise.all([loadCatalogue(), loadPendingReview(), loadCollection(), loadHiddenCards()]);
+  await Promise.all([loadCatalogue(), loadPendingReview(), loadCollection(), loadHiddenCards(), loadGamesHierarchy()]);
   renderDashboard();
   renderCollectionGrid();
   renderWishlistGrid();
@@ -501,6 +540,19 @@ async function unhideCard(cardId) {
   hiddenCardIds.delete(cardId);
   toast("Carte réaffichée dans le catalogue.", "ok");
   renderCatalogueGrid();
+}
+
+async function loadGamesHierarchy() {
+  const [gamesRes, setsRes] = await Promise.all([
+    sb.from("games").select("*").order("sort_order"),
+    sb.from("game_sets").select("*").order("sort_order"),
+  ]);
+  if (gamesRes.error) { toast("Erreur chargement jeux: " + gamesRes.error.message, "err"); return; }
+  if (setsRes.error) { toast("Erreur chargement extensions: " + setsRes.error.message, "err"); return; }
+  gamesList = gamesRes.data || [];
+  gameSetsList = setsRes.data || [];
+  // First load: expand every game by default so nothing is hidden on first visit.
+  if (expandedGames.size === 0) gamesList.forEach(g => expandedGames.add(g.slug));
 }
 
 async function loadPendingReview() {
@@ -550,7 +602,7 @@ function renderDashboard() {
 
   const byGame = {};
   owned.forEach(i => {
-    const g = i.cards ? i.cards.game : "Non catalogué";
+    const g = i.cards ? gameDisplayName(i.cards.game_slug) : "Non catalogué";
     byGame[g] = (byGame[g] || 0) + 1;
   });
   const el = document.getElementById("breakdown-game");
@@ -568,11 +620,18 @@ function renderDashboard() {
   }
 }
 
+function gameDisplayName(slug) {
+  const g = gamesList.find(x => x.slug === slug);
+  if (!g) return slug || "Non catalogué";
+  return g.subtitle ? `${g.name} — ${g.subtitle}` : g.name;
+}
+
 /* ---------- Filters ---------- */
 function populateFilters() {
   const gameSel = document.getElementById("col-filter-game");
-  const games = [...new Set(cardsCatalogue.map(c => c.game))];
-  gameSel.innerHTML = '<option value="">Tous les jeux</option>' + games.map(g => `<option value="${escapeHtml(g)}">${escapeHtml(g)}</option>`).join("");
+  const slugsInCatalogue = new Set(cardsCatalogue.map(c => c.game_slug));
+  const games = gamesList.filter(g => slugsInCatalogue.has(g.slug));
+  gameSel.innerHTML = '<option value="">Tous les jeux</option>' + games.map(g => `<option value="${escapeHtml(g.slug)}">${escapeHtml(gameDisplayName(g.slug))}</option>`).join("");
 
   const condSel = document.getElementById("col-filter-condition");
   const conds = [...new Set(collectionItems.map(i => i.condition).filter(Boolean))];
@@ -582,7 +641,7 @@ function populateFilters() {
 function populateCardSelect() {
   const sel = document.getElementById("f-card-id");
   sel.innerHTML = '<option value="">— Aucune / carte non cataloguée —</option>' +
-    cardsCatalogue.map(c => `<option value="${c.id}">${escapeHtml(c.game)} — ${escapeHtml(c.card_name)}${c.card_number ? " (" + escapeHtml(c.card_number) + ")" : ""}</option>`).join("");
+    cardsCatalogue.map(c => `<option value="${c.id}">${escapeHtml(gameDisplayName(c.game_slug))} — ${escapeHtml(c.card_name)}${c.card_number ? " (" + escapeHtml(c.card_number) + ")" : ""}</option>`).join("");
 }
 
 /* ---------- Photo URL cache ---------- */
@@ -598,7 +657,7 @@ async function renderCollectionGrid() {
   const gameF = document.getElementById("col-filter-game").value;  const condF = document.getElementById("col-filter-condition").value;
   let items = collectionItems.filter(i => i.status === "owned");
   if (search) items = items.filter(i => displayName(i).toLowerCase().includes(search));
-  if (gameF) items = items.filter(i => i.cards && i.cards.game === gameF);
+  if (gameF) items = items.filter(i => i.cards && i.cards.game_slug === gameF);
   if (condF) items = items.filter(i => i.condition === condF);
   await renderGrid("collection-grid", items, true);
 }
@@ -627,7 +686,7 @@ async function renderGrid(containerId, items, isCollectionItem) {
     const thumbInner = photoUrl
       ? `<img src="${photoUrl}" alt="carte" />`
       : `<div class="placeholder">Pas de photo</div>`;
-    const meta = item.cards ? `${escapeHtml(item.cards.game)}${item.cards.set_name ? " · " + escapeHtml(item.cards.set_name) : ""}` : "Non cataloguée";
+    const meta = item.cards ? `${escapeHtml(gameDisplayName(item.cards.game_slug))}${item.cards.set_name ? " · " + escapeHtml(item.cards.set_name) : ""}` : "Non cataloguée";
     tile.innerHTML = `
       <div class="thumb">${thumbInner}</div>
       <div class="info">
@@ -649,6 +708,28 @@ async function renderGrid(containerId, items, isCollectionItem) {
   });
 }
 
+function cardTileHtml(c, owned, isHidden) {
+  return `
+      <div class="card-tile${isHidden ? " hidden-card" : ""}">
+      <div class="thumb"><div class="placeholder">${c.official_image_url ? "" : "Pas d'image"}</div>${c.official_image_url ? `<img src="${c.official_image_url}" />` : ""}</div>
+      <div class="info">
+        <div class="title">${escapeHtml(c.card_name)}</div>
+        <div class="meta">${c.card_number ? escapeHtml(c.card_number) : ""}</div>
+        <div class="tags">
+          ${c.rarity ? `<span class="tag">${escapeHtml(c.rarity)}</span>` : ""}
+          <span class="badge ${owned ? "owned" : "missing"}">${owned ? "Possédée" : "Manquante"}</span>
+          ${isHidden ? `<span class="tag">Masquée</span>` : ""}
+        </div>
+      </div>
+      <div class="actions">
+        ${owned ? "" : `<button class="primary" data-quickadd="${c.id}">+ Ajouter</button>`}
+        ${isHidden
+          ? `<button class="secondary" data-unhide="${c.id}">Réafficher</button>`
+          : `<button class="secondary" data-hide="${c.id}">Masquer</button>`}
+      </div>
+      </div>`;
+}
+
 function renderCatalogueGrid() {
   const search = document.getElementById("cat-search").value.toLowerCase();
   const showHidden = document.getElementById("cat-show-hidden").checked;
@@ -663,37 +744,109 @@ function renderCatalogueGrid() {
   const ownedCardIds = new Set(collectionItems.filter(i => i.status === "owned" && i.card_id).map(i => i.card_id));
   const el = document.getElementById("catalogue-grid");
   const hiddenNote = hiddenCount > 0
-    ? `<div style="grid-column:1/-1; font-size:12px; color:var(--text-dim); margin-bottom:4px;">${hiddenCount} carte${hiddenCount > 1 ? "s" : ""} masquée${hiddenCount > 1 ? "s" : ""}${showHidden ? "" : " (coche \"Afficher les cartes masquées\" pour les voir)"}.</div>`
+    ? `<div style="font-size:12px; color:var(--text-dim); margin-bottom:10px;">${hiddenCount} carte${hiddenCount > 1 ? "s" : ""} masquée${hiddenCount > 1 ? "s" : ""}${showHidden ? "" : " (coche \"Afficher les cartes masquées\" pour les voir)"}.</div>`
     : "";
-  if (cards.length === 0) {
-    el.innerHTML = hiddenNote + '<div class="empty-state" style="grid-column:1/-1;">Aucune carte au catalogue pour cette recherche.</div>';
+  if (cards.length === 0 && gamesList.length === 0) {
+    el.innerHTML = hiddenNote + '<div class="empty-state">Aucune carte au catalogue pour cette recherche.</div>';
     return;
   }
-  el.innerHTML = hiddenNote;
+
+  const isSearching = !!search;
+
+  // Group matching cards by game_slug -> set_name
+  const bySlugSet = new Map();
   cards.forEach(c => {
-    const owned = ownedCardIds.has(c.id);
-    const isHidden = hiddenCardIds.has(c.id);
-    const tile = document.createElement("div");
-    tile.className = "card-tile" + (isHidden ? " hidden-card" : "");
-    tile.innerHTML = `
-      <div class="thumb"><div class="placeholder">${c.official_image_url ? "" : "Pas d'image"}</div>${c.official_image_url ? `<img src="${c.official_image_url}" />` : ""}</div>
-      <div class="info">
-        <div class="title">${escapeHtml(c.card_name)}</div>
-        <div class="meta">${escapeHtml(c.game)}${c.set_name ? " · " + escapeHtml(c.set_name) : ""}${c.card_number ? " · " + escapeHtml(c.card_number) : ""}</div>
-        <div class="tags">
-          ${c.rarity ? `<span class="tag">${escapeHtml(c.rarity)}</span>` : ""}
-          <span class="badge ${owned ? "owned" : "missing"}">${owned ? "Possédée" : "Manquante"}</span>
-          ${isHidden ? `<span class="tag">Masquée</span>` : ""}
-        </div>
-      </div>
-      <div class="actions">
-        ${owned ? "" : `<button class="primary" data-quickadd="${c.id}">+ Ajouter</button>`}
-        ${isHidden
-          ? `<button class="secondary" data-unhide="${c.id}">Réafficher</button>`
-          : `<button class="secondary" data-hide="${c.id}">Masquer</button>`}
-      </div>`;
-    el.appendChild(tile);
+    const slug = c.game_slug || "_unknown";
+    if (!bySlugSet.has(slug)) bySlugSet.set(slug, new Map());
+    const setMap = bySlugSet.get(slug);
+    const sn = c.set_name || "Autres";
+    if (!setMap.has(sn)) setMap.set(sn, []);
+    setMap.get(sn).push(c);
   });
+
+  let html = hiddenNote;
+  let anyRendered = false;
+
+  gamesList.forEach(game => {
+    const setMap = bySlugSet.get(game.slug) || new Map();
+    const totalInGame = [...setMap.values()].reduce((s, a) => s + a.length, 0);
+    if (isSearching && totalInGame === 0) return; // hide empty games while searching
+    anyRendered = true;
+
+    const gameExpanded = isSearching ? true : expandedGames.has(game.slug);
+    html += `<div class="game-section" data-game="${escapeHtml(game.slug)}">
+      <div class="game-header ${gameExpanded ? "" : "collapsed"}" data-toggle-game="${escapeHtml(game.slug)}">
+        ${game.logo_url ? `<img class="logo" src="${game.logo_url}" alt="" />` : ""}
+        <div class="ginfo">
+          <div class="gname">${escapeHtml(game.name)}</div>
+          ${game.subtitle ? `<div class="gsub">${escapeHtml(game.subtitle)}</div>` : ""}
+        </div>
+        <div class="gcount">${totalInGame} carte${totalInGame !== 1 ? "s" : ""}</div>
+        <span class="chevron">▾</span>
+      </div>
+      <div class="game-body ${gameExpanded ? "" : "collapsed"}">`;
+
+    if (totalInGame === 0) {
+      html += `<div class="empty-state">Aucune carte cataloguée pour le moment dans ce jeu.</div>`;
+    } else {
+      const setOrder = gameSetsList.filter(gs => gs.game_slug === game.slug);
+      const orderMap = new Map(setOrder.map(gs => [gs.set_name, gs]));
+      const setNames = [...setMap.keys()].sort((a, b) => {
+        const oa = orderMap.has(a) ? orderMap.get(a).sort_order : 999;
+        const ob = orderMap.has(b) ? orderMap.get(b).sort_order : 999;
+        if (oa !== ob) return oa - ob;
+        return a.localeCompare(b);
+      });
+
+      setNames.forEach(setName => {
+        const setCards = setMap.get(setName);
+        const gsMeta = orderMap.get(setName);
+        const setKey = game.slug + "::" + setName;
+        const setExpanded = isSearching ? true : expandedSets.has(setKey);
+        const displayName = (gsMeta && gsMeta.display_name) ? gsMeta.display_name : setName;
+        html += `<div class="set-section">
+          <div class="set-header ${setExpanded ? "" : "collapsed"}" data-toggle-set="${escapeHtml(setKey)}">
+            ${gsMeta && gsMeta.logo_url ? `<img class="logo" src="${gsMeta.logo_url}" alt="" />` : ""}
+            <div class="sname">${escapeHtml(displayName)}</div>
+            <div class="scount">${setCards.length}</div>
+            <span class="chevron">▾</span>
+          </div>
+          <div class="set-body card-grid ${setExpanded ? "" : "collapsed"}">`;
+        setCards.forEach(c => {
+          html += cardTileHtml(c, ownedCardIds.has(c.id), hiddenCardIds.has(c.id));
+        });
+        html += `</div></div>`;
+      });
+    }
+
+    html += `</div></div>`;
+  });
+
+  // Safety net: any card whose game_slug doesn't match a known game (shouldn't happen, but
+  // avoids silently hiding a card if the taxonomy and the data ever drift apart).
+  const knownSlugs = new Set(gamesList.map(g => g.slug));
+  const orphanSlugs = [...bySlugSet.keys()].filter(s => !knownSlugs.has(s));
+  if (orphanSlugs.length > 0) {
+    anyRendered = true;
+    const orphanCards = orphanSlugs.flatMap(s => [...bySlugSet.get(s).values()].flat());
+    html += `<div class="game-section">
+      <div class="game-header" data-toggle-game="_unknown">
+        <div class="ginfo"><div class="gname">Autres / non classées</div></div>
+        <div class="gcount">${orphanCards.length} carte${orphanCards.length !== 1 ? "s" : ""}</div>
+        <span class="chevron">▾</span>
+      </div>
+      <div class="game-body">
+        <div class="set-body card-grid">`;
+    orphanCards.forEach(c => { html += cardTileHtml(c, ownedCardIds.has(c.id), hiddenCardIds.has(c.id)); });
+    html += `</div></div></div>`;
+  }
+
+  if (!anyRendered) {
+    html += '<div class="empty-state">Aucune carte au catalogue pour cette recherche.</div>';
+  }
+
+  el.innerHTML = html;
+
   el.querySelectorAll("[data-quickadd]").forEach(btn => {
     btn.onclick = () => openModal(null, btn.dataset.quickadd);
   });
@@ -702,6 +855,20 @@ function renderCatalogueGrid() {
   });
   el.querySelectorAll("[data-unhide]").forEach(btn => {
     btn.onclick = () => unhideCard(btn.dataset.unhide);
+  });
+  el.querySelectorAll("[data-toggle-game]").forEach(h => {
+    h.onclick = () => {
+      const slug = h.dataset.toggleGame;
+      if (expandedGames.has(slug)) expandedGames.delete(slug); else expandedGames.add(slug);
+      renderCatalogueGrid();
+    };
+  });
+  el.querySelectorAll("[data-toggle-set]").forEach(h => {
+    h.onclick = () => {
+      const key = h.dataset.toggleSet;
+      if (expandedSets.has(key)) expandedSets.delete(key); else expandedSets.add(key);
+      renderCatalogueGrid();
+    };
   });
 }
 
