@@ -12,8 +12,10 @@ Card Game et jeux apparentés).
   `vtdohksscretlbvhsgfo`, accédé côté client via le SDK
   [`@supabase/supabase-js`](https://github.com/supabase/supabase-js) chargé depuis le
   CDN unpkg (version épinglée, voir plus bas).
-- **Hébergement** : déploiement statique automatique sur [Vercel](https://vercel.com),
-  lié au dépôt GitHub `juprnt/goku-ss3-collection` (push sur `main` = déploiement).
+- **Hébergement** : [Vercel](https://vercel.com), projet `goku-ss3-collection`, **lié
+  au dépôt GitHub `juprnt/goku-ss3-collection`**. Tout push sur `main` déclenche un
+  build et un déploiement automatique en production — il n'y a pas d'étape de
+  préversion/staging intermédiaire, le déploiement est direct.
 - **Auth** : email/mot de passe via Supabase Auth. La clé utilisée côté client
   (`SUPABASE_ANON_KEY`) est la clé publique anonyme — elle est censée être visible
   côté client ; la sécurité réelle des données repose sur les policies RLS
@@ -21,20 +23,22 @@ Card Game et jeux apparentés).
 
 ## Fichiers du dépôt
 
-| Fichier       | Rôle                                                              |
-|---------------|--------------------------------------------------------------------|
-| `index.html`  | Toute l'application (CSS inline + JS inline).                     |
-| `logo.png`    | Logo de l'app, utilisé comme favicon, apple-touch-icon et logo UI.|
-| `README.md`   | Ce fichier.                                                        |
+| Fichier             | Rôle                                                                 |
+|----------------------|----------------------------------------------------------------------|
+| `index.html`         | Toute l'application (CSS inline + JS inline).                       |
+| `logo.png`           | Logo de l'app, utilisé comme favicon, apple-touch-icon et logo UI.  |
+| `README.md`          | Ce fichier — vue d'ensemble rapide.                                  |
+| `DOCUMENTATION.md`   | Documentation détaillée (schéma de données, historique complet, déploiement). |
 
 ## Tables Supabase utilisées
 
 - `public.cards` — catalogue de référence des cartes (une ligne = une carte connue,
   toutes éditions confondues). Colonne `review_status` : `confirmed` (visible dans
   l'onglet Catalogue) ou `pending_review` (en attente de validation, onglet
-  "Cartes à valider").
+  "Cartes à valider"). 83 cartes confirmées actuellement.
 - `public.games` / `public.game_sets` — hiérarchie Jeu → Extension utilisée pour
-  regrouper l'affichage du catalogue.
+  regrouper l'affichage du catalogue. `game_sets.sort_order` reflète l'ordre
+  chronologique réel de sortie de chaque extension (du plus ancien au plus récent).
 - `public.collection_items` — les cartes possédées / en wishlist par l'utilisateur
   connecté (données personnelles).
 - `public.card_photos` — photos recto/verso associées à un `collection_item`,
@@ -62,6 +66,14 @@ Un seul fichier statique, servi tel quel par Vercel. Au chargement :
 
 Les photos de collection sont privées : chaque affichage résout une URL signée
 via `getPhotoUrl()`, mise en cache côté client (voir section Optimisations).
+
+## Période de test en cours
+
+Le projet entre dans une phase de test utilisateur de plusieurs semaines. Pour tout
+bug ou comportement inattendu rencontré pendant cette période, le plus simple est de
+créer une entrée dans l'onglet **Issues** du dépôt GitHub
+(`github.com/juprnt/goku-ss3-collection/issues`) — ça garde un historique daté et
+évite de perdre le contexte d'une session à l'autre.
 
 ## Historique des optimisations (23/08/2026)
 
@@ -99,6 +111,33 @@ pour référence future :
 Validation effectuée avant déploiement : vérification syntaxique JS
 (`node --check`), et test de chargement de la page dans Chromium headless
 (0 erreur console/réseau, favicon et logo chargés, cache et debounce présents).
+
+## Historique des correctifs (23/08/2026, passe 2)
+
+- **Favicon invisible sur PC (Chrome/Edge desktop)** : le favicon pointait vers
+  `/logo.png` sans paramètre de version, donc un navigateur ayant mis en cache une
+  version précédente (ou une réponse d'erreur) ne rechargeait jamais l'icône.
+  Corrigé avec un cache-busting (`?v=6`) sur toutes les balises favicon /
+  apple-touch-icon / logo (`<img>` écran de connexion et en-tête).
+- **Incident logo corrompu en production** : un déploiement manuel de fichiers a
+  brièvement remplacé `logo.png` par une image corrompue en production. Le dépôt
+  GitHub, lui, n'a jamais été touché et contenait toujours le bon fichier. Résolu
+  en promouvant en production le déploiement Git existant (déjà construit à partir
+  du bon `logo.png`), sans jamais retransmettre le fichier binaire manuellement.
+  Voir `DOCUMENTATION.md` §7 pour le détail et la leçon à en tirer.
+- **Cartes manquantes (Dragon Ball Super Card Game Fusion World)** : passe de
+  recherche sur Cardmarket / dragonball.gg pour identifier des cartes "Son Goku
+  SS3" absentes du catalogue ; ajout de 3 cartes (New Adventure FB05, Wish for
+  Shenron FB07, Dual Evolution FB09) et remplacement d'une image basse résolution
+  par une version plus grande. Catalogue confirmé : 83 cartes (était 80).
+- **Ordre de tri des extensions Fusion World** : `game_sets.sort_order` mis à jour
+  en base pour refléter l'ordre chronologique réel de sortie (du plus ancien —
+  Awakened Pulse — au plus récent — Brightness of Hope). Le code de tri
+  (`renderCatalogueGrid`, `populateCatalogueFilters`) existait déjà et s'appuie sur
+  cette colonne — seule la donnée a été corrigée.
+- **Confirmation du lien Git ↔ Vercel** : le projet Vercel est bien relié au dépôt
+  GitHub (`git push` sur `main` = déploiement automatique en production). C'est ce
+  lien qui a permis de résoudre l'incident du logo sans risque.
 
 ### Pistes non traitées (volontairement laissées de côté)
 
