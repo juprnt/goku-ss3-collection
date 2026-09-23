@@ -219,14 +219,27 @@
   <div class="auth-box">
     <img class="app-logo" src="/logo.png?v=6" alt="Goku SS3 Collection" style="width:88px;height:88px;border-radius:20px;display:block;margin:0 auto 14px;box-shadow:0 8px 24px rgba(214,160,47,0.35);" />
     <h1 style="text-align:center;">Goku SS3 Collection</h1>
-    <p class="sub">Connecte-toi pour accéder à ta collection.</p>
-    <label>Email</label>
-    <input type="email" id="auth-email" placeholder="toi@example.com" autocomplete="email" />
-    <label>Mot de passe</label>
-    <input type="password" id="auth-password" placeholder="••••••••" autocomplete="current-password" />
-    <div class="auth-toggle">
-      <button class="primary" id="btn-signin" style="flex:1">Se connecter</button>
-      <button class="secondary" id="btn-signup" style="flex:1">Créer un compte</button>
+    <div id="login-form">
+      <p class="sub">Connecte-toi pour accéder à ta collection.</p>
+      <label>Email</label>
+      <input type="email" id="auth-email" placeholder="toi@example.com" autocomplete="email" />
+      <label>Mot de passe</label>
+      <input type="password" id="auth-password" placeholder="••••••••" autocomplete="current-password" />
+      <div class="auth-toggle">
+        <button class="primary" id="btn-signin" style="flex:1">Se connecter</button>
+        <button class="secondary" id="btn-signup" style="flex:1">Créer un compte</button>
+      </div>
+      <button class="ghost" id="btn-forgot" style="width:100%;margin-top:8px;">Mot de passe oublié ?</button>
+    </div>
+    <div id="reset-form" class="hidden">
+      <p class="sub">Choisis ton nouveau mot de passe.</p>
+      <label>Nouveau mot de passe</label>
+      <input type="password" id="reset-password" placeholder="6 caractères minimum" autocomplete="new-password" />
+      <label>Confirmer le mot de passe</label>
+      <input type="password" id="reset-password-confirm" placeholder="••••••••" autocomplete="new-password" />
+      <div class="auth-toggle">
+        <button class="primary" id="btn-reset" style="flex:1">Enregistrer</button>
+      </div>
     </div>
     <div id="auth-msg"></div>
   </div>
@@ -394,7 +407,12 @@
 <script>
 const SUPABASE_URL = "https://vtdohksscretlbvhsgfo.supabase.co";
 const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZ0ZG9oa3NzY3JldGxidmhzZ2ZvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODcxNDc4OTcsImV4cCI6MjEwMjcyMzg5N30.ougiP2EyKdNQc2_9EzbHsVx4v8JucLz1PJITfTe_ULg";
+// Lu avant createClient : le SDK efface le jeton de l'URL après l'avoir traité.
+let passwordRecovery = /type=recovery/.test(location.hash);
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+sb.auth.onAuthStateChange(event => {
+  if (event === "PASSWORD_RECOVERY") { passwordRecovery = true; showResetForm(); }
+});
 
 let currentUser = null;
 let cardsCatalogue = [];   // confirmed catalogue rows only
@@ -448,8 +466,45 @@ async function onLoggedIn(user) {
 
 async function checkSession() {
   const { data } = await sb.auth.getSession();
+  if (passwordRecovery) { showResetForm(); return; }
   if (data.session) { await onLoggedIn(data.session.user); }
 }
+
+/* ---------- Mot de passe oublié ---------- */
+document.getElementById("btn-forgot").onclick = async () => {
+  const email = document.getElementById("auth-email").value.trim();
+  const msgEl = document.getElementById("auth-msg");
+  if (!email) { msgEl.className = "err"; msgEl.textContent = "Renseigne ton email, puis clique à nouveau sur « Mot de passe oublié ? »."; return; }
+  const { error } = await sb.auth.resetPasswordForEmail(email, { redirectTo: location.origin + location.pathname });
+  if (error) { msgEl.className = "err"; msgEl.textContent = error.message; return; }
+  msgEl.className = "ok";
+  msgEl.textContent = "Email envoyé. Ouvre le lien qu'il contient pour choisir un nouveau mot de passe.";
+};
+
+function showResetForm() {
+  document.getElementById("app").style.display = "none";
+  document.getElementById("auth-screen").style.display = "";
+  document.getElementById("login-form").classList.add("hidden");
+  document.getElementById("reset-form").classList.remove("hidden");
+}
+
+document.getElementById("btn-reset").onclick = async () => {
+  const password = document.getElementById("reset-password").value;
+  const confirm = document.getElementById("reset-password-confirm").value;
+  const msgEl = document.getElementById("auth-msg");
+  msgEl.className = "err";
+  if (password.length < 6) { msgEl.textContent = "6 caractères minimum."; return; }
+  if (password !== confirm) { msgEl.textContent = "Les deux mots de passe ne correspondent pas."; return; }
+  const { data, error } = await sb.auth.updateUser({ password });
+  if (error) { msgEl.textContent = error.message; return; }
+  passwordRecovery = false;
+  history.replaceState(null, "", location.pathname);
+  msgEl.className = ""; msgEl.textContent = "";
+  document.getElementById("reset-form").classList.add("hidden");
+  document.getElementById("login-form").classList.remove("hidden");
+  toast("Mot de passe mis à jour.", "ok");
+  await onLoggedIn(data.user);
+};
 
 /* ---------- Tabs ---------- */
 document.querySelectorAll("nav.tabs .tab").forEach(btn => {

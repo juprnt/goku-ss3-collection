@@ -23,7 +23,7 @@ Aucune dépendance npm, aucun système de build : modifier `index.html` (ou `log
 
 ## 3. Authentification
 
-Email + mot de passe via `supabase.auth` (`signUp` / `signInWithPassword`). Chaque compte est isolé : les données de collection (`collection_items`, `card_photos`, `hidden_cards`) sont scoping par `user_id` et protégées par RLS. Le catalogue de référence (`cards`, `games`, `game_sets`) est partagé entre tous les utilisateurs (lecture commune).
+Email + mot de passe via `supabase.auth` (`signUp` / `signInWithPassword`). Lien **Mot de passe oublié ?** (`resetPasswordForEmail`, retour sur l'URL courante) : à l'ouverture du lien reçu par email, l'événement `PASSWORD_RECOVERY` affiche un formulaire de nouveau mot de passe (`updateUser`). Prérequis côté Supabase : **Site URL** / **Redirect URLs** (Authentication › URL Configuration) doivent contenir `https://goku-ss3-collection.vercel.app`. Chaque compte est isolé : les données de collection (`collection_items`, `card_photos`, `hidden_cards`) sont scoping par `user_id` et protégées par RLS. Le catalogue de référence (`cards`, `games`, `game_sets`) est partagé entre tous les utilisateurs (lecture commune).
 
 ## 4. Modèle de données (Supabase / Postgres, schéma `public`)
 
