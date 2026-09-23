@@ -59,6 +59,8 @@ Table de jointure `user_id` + `card_id` : permet à un utilisateur de masquer un
 
 ## 5. Fonctionnalités (onglets de l'app)
 
+**Navigation** (depuis le 23/09/2026) : menu burger ☰ en haut à gauche → tiroir latéral listant les 6 sections (avec le compteur de cartes à valider ; une pastille orange sur ☰ le signale menu fermé), l'e-mail du compte et **Déconnexion**. L'en-tête affiche le nom de la section courante et un raccourci 📷 vers le scanner. Dans l'app Android, le bouton retour ferme le menu ou la fenêtre ouverte, sinon revient au tableau de bord, et ne quitte l'app que depuis celui-ci (plugin `@capacitor/app`).
+
 1. **Tableau de bord** — statistiques : nombre de cartes possédées, quantité totale, valeur estimée, total dépensé, wishlist, taille du catalogue, répartition par jeu. La **valeur estimée** utilise la valeur saisie sur l'item, sinon le prix Cardmarket du jour × quantité (calcul en mémoire, jamais écrit dans `collection_items`) ; sous-titre « dont X € selon Cardmarket (N cartes) ».
 2. **📷 Scanner & IA** — photo d'une carte (appareil photo ou galerie) → reconnaissance par le serveur IA local du Mac mini (voir `ai-server/README.md`) : cartes du catalogue correspondantes avec badge Possédée/Manquante, bouton **+ Ajouter** qui ouvre la fenêtre d'ajout pré-remplie avec la photo en recto. Plus une recherche en langage naturel (« mes cartes Masters en mauvais état »). Nécessite Tailscale actif sur l'appareil et le Mac mini allumé.
 3. **Ma collection** — liste des cartes possédées (avec prix Cardmarket et lien quand la carte est liée), recherche, filtres (jeu, état), vérification rapide "est-ce que je possède déjà cette carte ?", ajout/édition avec photos recto/verso.
