@@ -2,9 +2,11 @@
 
 > ⚠️ **Site web abandonné le 23/09/2026 : projet Vercel `goku-ss3-collection` **mis en pause** (le site répond 503). L'app s'utilise désormais via l'**APK Android** (`mobile/`). Réactivable en un clic dans le dashboard Vercel si besoin.**
 
-Application web mono-page (pas de framework, pas de build) pour cataloguer et gérer
-une collection personnelle de cartes "Son Goku Super Saiyan 3" (Dragon Ball Super
-Card Game et jeux apparentés).
+Application mono-page (pas de framework, pas de build), livrée en **app Android**, pour
+cataloguer et gérer une collection personnelle de cartes "Son Goku Super Saiyan 3"
+(Dragon Ball Super Card Game et jeux apparentés). Reconnaissance de cartes par IA locale,
+prix Cardmarket, recherche Vinted, veille des nouvelles cartes Bandai et sauvegardes
+automatiques, le tout piloté depuis un Mac mini.
 
 ## Stack technique
 
@@ -30,15 +32,18 @@ Card Game et jeux apparentés).
 | `logo.png`           | Logo de l'app, utilisé comme favicon, apple-touch-icon et logo UI.  |
 | `README.md`          | Ce fichier — vue d'ensemble rapide.                                  |
 | `DOCUMENTATION.md`   | Documentation détaillée (schéma de données, historique complet, déploiement). |
-| `ai-server/`         | Serveur IA local (Mac mini + Ollama) : reconnaissance de cartes et recherche en langage naturel. Exclu du déploiement Vercel via `.vercelignore`. Voir [`ai-server/README.md`](./ai-server/README.md). |
-| `mobile/`            | App Android (Capacitor) : `build.sh` génère l'APK à partir de `index.html`. Exclu du déploiement Vercel. Voir [`mobile/README.md`](./mobile/README.md). |
+| `ai-server/`         | Serveur IA local (Mac mini + Ollama) : reconnaissance de cartes et recherche en langage naturel ; `tools/` : revue et veille des cartes officielles Bandai. Voir [`ai-server/README.md`](./ai-server/README.md). |
+| `mobile/`            | App Android (Capacitor) : `build.sh` génère l'APK à partir de `index.html`. Voir [`mobile/README.md`](./mobile/README.md). |
+| `backup/`            | Maintien en éveil de Supabase + sauvegarde hebdomadaire dans iCloud (`goku_backup.py`, `install.sh`). |
+| `docs/`              | Tâches préparées (ex. `TASK-prix-cardmarket.md`, réalisée). |
+| `CLAUDE.md`          | Consignes pour les agents Claude Code qui travaillent sur ce dépôt. |
 
 ## Tables Supabase utilisées
 
 - `public.cards` — catalogue de référence des cartes (une ligne = une carte connue,
   toutes éditions confondues). Colonne `review_status` : `confirmed` (visible dans
   l'onglet Catalogue) ou `pending_review` (en attente de validation, onglet
-  "Cartes à valider"). 115 cartes confirmées au 23/09/2026.
+  "Cartes à valider"). 115 cartes confirmées + 1 à valider au 23/09/2026.
 - `public.games` / `public.game_sets` — hiérarchie Jeu → Extension utilisée pour
   regrouper l'affichage du catalogue. `game_sets.sort_order` reflète l'ordre
   chronologique réel de sortie de chaque extension (du plus ancien au plus récent).
@@ -53,22 +58,32 @@ explicite de l'utilisateur concerné** — ce sont des données personnelles.
 
 ## Fonctionnement de l'app (`index.html`)
 
-Un seul fichier statique, servi tel quel par Vercel. Au chargement :
+Un seul fichier, embarqué dans l'APK Android (`mobile/build.sh`). Au chargement :
 
 1. `checkSession()` vérifie si une session Supabase existe déjà (cookie/local
    storage géré par le SDK) et connecte automatiquement l'utilisateur si oui.
 2. Une fois connecté, `loadAll()` charge en parallèle (`Promise.all`) : le
    catalogue confirmé, la file de validation, la collection de l'utilisateur, les
-   cartes masquées et la hiérarchie jeux/extensions — puis déclenche le premier
-   rendu de tous les onglets.
-3. Chaque onglet (`Tableau de bord`, `Ma collection`, `Wishlist`,
-   `Catalogue de référence`, `Cartes à valider`) a sa propre fonction de rendu
+   cartes masquées, la hiérarchie jeux/extensions et les prix Cardmarket — puis
+   déclenche le premier rendu de toutes les sections.
+3. Chaque section, accessible par le menu ☰ (`Tableau de bord`, `Scanner & IA`,
+   `Ma collection`, `Wishlist`, `Catalogue de référence`, `Cartes à valider`), a sa propre fonction de rendu
    (`renderDashboard`, `renderCollectionGrid`, etc.) qui reconstruit son HTML à
    partir des données déjà chargées en mémoire (pas de requête réseau
    supplémentaire, sauf pour résoudre les URLs de photos).
 
 Les photos de collection sont privées : chaque affichage résout une URL signée
 via `getPhotoUrl()`, mise en cache côté client (voir section Optimisations).
+
+## Services sur le Mac mini
+
+| Service (LaunchAgent) | Quand | Rôle |
+|---|---|---|
+| `com.goku.ai-server` + Ollama | en continu | Serveur IA (scanner, recherche) sur `https://macmini-de-juli1.tail13a987.ts.net` via Tailscale |
+| `com.goku.bandai-watch` | tous les jours 08:00 | Veille des nouvelles cartes Goku SS3 sur les bases officielles Bandai |
+| `com.goku.backup` | tous les jours 09:30 | Maintien en éveil de Supabase + sauvegarde hebdomadaire dans iCloud Drive/Sauvegardes/Goku SS3 |
+
+Détails : `DOCUMENTATION.md` §11 à §13.
 
 ## Période de test en cours
 

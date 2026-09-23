@@ -1,6 +1,6 @@
 # Goku SS3 Card Collection — Documentation
 
-_Dernière mise à jour : 23 août 2026_
+_Dernière mise à jour : 23 septembre 2026_
 
 ## 1. Résumé
 
@@ -105,9 +105,9 @@ Le logo ("EDITION" + silhouette de Goku SS3, fond doré) est un fichier externe 
 ## 8. Structure du fichier `index.html`
 
 - `<head>` : meta, titre, favicon/apple-touch-icon/shortcut icon (`/logo.png?v=6`).
-- `<style>` : variables CSS (`:root`), styles de l'écran d'authentification, de la topbar, des onglets, des grilles de cartes, des media queries mobile/tablette, de la modale d'ajout/édition, des toasts.
-- `<body>` : écran d'authentification, coquille de l'app (topbar + onglets + 5 panneaux), modale d'ajout/édition, conteneur de toasts.
-- `<script>` : initialisation Supabase, gestion de session/auth, chargement des données (`loadAll`), cache des URLs de photos (`getPhotoUrl`), rendu des grilles (`renderGrid`, `renderCatalogueGrid`, `renderReviewGrid`), filtres (`populateFilters`, `populateCatalogueFilters`), modale, upload de photos, utilitaires (`debounce`, `escapeHtml`, `gameDisplayName`).
+- `<style>` : variables CSS (`:root`), écran d'authentification, en-tête et menu latéral (burger), grilles de cartes (3 colonnes ≤ 480 px, 5 colonnes 481–1100 px), prix/liens Cardmarket et Vinted, section Scanner & IA, modale d'ajout/édition, toasts.
+- `<body>` : écran d'authentification (connexion + réinitialisation par code), coquille de l'app (en-tête ☰ / titre / 📷, tiroir de menu, 6 panneaux), modale d'ajout/édition, conteneur de toasts.
+- `<script>` : initialisation Supabase, auth et mot de passe oublié par code (`verifyOtp`), menu (`setMenuOpen`, bouton retour Android), chargement des données (`loadAll`, dont `loadMarketInfo`), cache des URLs de photos (`getPhotoUrl`), rendu des grilles (`renderGrid`, `renderCatalogueGrid`, `renderReviewGrid`, `cardTileHtml`), prix et liens (`marketHtml`, `marketPrice`, `vintedUrl`), Scanner & IA (`aiFetch`, `nativeAiRequest`, `shrinkPhoto`, `runScan`, `runAiSearch`), filtres, modale, upload de photos, utilitaires (`debounce`, `escapeHtml`, `gameDisplayName`).
 
 ## 9. Pistes pour la suite
 
@@ -115,8 +115,13 @@ Le logo ("EDITION" + silhouette de Goku SS3, fond doré) est un fichier externe 
 - Pas de pagination sur les grilles — à surveiller si le catalogue grossit beaucoup au-delà de quelques centaines de cartes.
 - Pas d'écoute `onAuthStateChange` — un token expiré en cours de session n'est pas géré automatiquement (l'utilisateur doit recharger la page).
 - 9 images Carddass/DBH orphelines identifiées mais non intégrées au catalogue (à confirmer avec l'utilisateur avant ajout).
+- **À faire (utilisateur)** : ajouter `{{ .Token }}` au modèle d'e-mail *Reset Password* de Supabase (sinon le « Mot de passe oublié » par code ne reçoit pas de code) ; éventuellement régénérer la clé secrète Supabase (elle a transité dans une conversation) et mettre à jour `~/.config/goku-backup/secret`.
+- **À trancher** : FB05-119 (au catalogue comme SS3, mais les 5 versions officielles montrent un Goku SS1) ; FB09-081 en « Cartes à valider » ; lien Cardmarket de BT20-095-V3 (prix ~5 800 €, correspondance `probable`).
+- Lier à Cardmarket les 32 cartes Fusion World ajoutées le 23/09/2026 (parallèles, promos FP…) pour qu'elles aient un prix.
 
 ## 10. Période de test (à partir du 23/08/2026)
+
+> Section historique : l'app est désormais livrée en APK Android (site Vercel abandonné le 23/09/2026).
 
 Le projet entre dans une phase de test utilisateur de plusieurs semaines, sur l'app telle qu'elle est en production à cette date (logo correct, favicon fonctionnel, tri par jeu/extension chronologique, catalogue à 83 cartes).
 
