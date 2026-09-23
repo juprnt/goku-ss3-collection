@@ -84,7 +84,9 @@ def base_key(number: str) -> str:
 class Supabase:
     def __init__(self, http: httpx.AsyncClient, key: str):
         self.http = http
-        self.h = {"apikey": key, "Content-Type": "application/json"}
+        # User-Agent propre : Supabase refuse les clés secrètes (sb_secret_…) sur une requête qui
+        # ressemble à un navigateur, or le client HTTP partagé se présente en « Mozilla » pour Bandai.
+        self.h = {"apikey": key, "Content-Type": "application/json", "User-Agent": "goku-ss3-bandai-watch"}
         if key.startswith("eyJ"):  # ancienne clé service_role (JWT)
             self.h["Authorization"] = f"Bearer {key}"
 
