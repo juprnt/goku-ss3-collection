@@ -37,7 +37,7 @@ Card Game et jeux apparentés).
 - `public.cards` — catalogue de référence des cartes (une ligne = une carte connue,
   toutes éditions confondues). Colonne `review_status` : `confirmed` (visible dans
   l'onglet Catalogue) ou `pending_review` (en attente de validation, onglet
-  "Cartes à valider"). 83 cartes confirmées actuellement.
+  "Cartes à valider"). 115 cartes confirmées au 23/09/2026.
 - `public.games` / `public.game_sets` — hiérarchie Jeu → Extension utilisée pour
   regrouper l'affichage du catalogue. `game_sets.sort_order` reflète l'ordre
   chronologique réel de sortie de chaque extension (du plus ancien au plus récent).

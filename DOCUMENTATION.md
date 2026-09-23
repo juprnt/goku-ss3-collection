@@ -35,14 +35,14 @@ Les "jeux" de haut niveau. Clé primaire `slug`.
 | `carddass` | Carddass | Bandai — cartes rétro (DB / DBZ / GT) | 16 |
 | `dbh` | Dragon Ball Heroes | Bandai — jeu de cartes arcade | 5 |
 | `dbscg-masters` | Dragon Ball Super Card Game | Masters | 55 |
-| `dbscg-fusion` | Dragon Ball Super Card Game | Fusion World | 7 |
+| `dbscg-fusion` | Dragon Ball Super Card Game | Fusion World | 39 |
 
-Total : **83 cartes confirmées** (80 avant la passe Cardmarket du 23/08/2026, voir §7).
+Total : **115 cartes confirmées** + 1 en attente de validation (83 avant la passe base officielle Bandai du 23/09/2026, voir §7).
 
 ### `game_sets` (349 lignes)
 Séries / extensions à l'intérieur d'un jeu (`game_slug` + `set_name`, avec `display_name` et `sort_order` pour l'affichage). `sort_order` reflète l'ordre chronologique réel de sortie de chaque extension — c'est cette colonne qui pilote l'ordre d'affichage du catalogue (le code de tri lui-même n'a pas changé, seule la donnée a été corrigée pour Fusion World le 23/08/2026).
 
-### `cards` (83 lignes confirmées)
+### `cards` (115 lignes confirmées)
 Le catalogue de référence. Colonnes clés : `game`, `game_slug` (FK → `games.slug`), `set_name`, `set_code`, `card_number`, `card_name`, `rarity`, `card_type`, `color`, `language`, `release_date`, `official_image_url`, `source_url`, `notes`, `review_status` (`confirmed` / `pending_review` / `rejected`), `review_source`.
 
 Les cartes en `pending_review` proviennent d'une détection automatique (ex. reconnaissance sur dbzcollection.fr) et apparaissent dans l'onglet **Cartes à valider** avant d'intégrer le catalogue officiel. 0 carte en attente actuellement.
@@ -90,6 +90,11 @@ Le logo ("EDITION" + silhouette de Goku SS3, fond doré) est un fichier externe 
 - **Favicon invisible sur PC (Chrome/Edge desktop)** : le favicon pointait vers `/logo.png` sans paramètre de version ; un navigateur ayant mis en cache une version précédente (ou une réponse d'erreur) ne rechargeait jamais l'icône. Corrigé le 23/08/2026 avec un cache-busting (`?v=6`) sur toutes les balises favicon / apple-touch-icon / logo.
 - **Incident logo corrompu en production (23/08/2026)** : lors d'une tentative de correction manuelle, un déploiement de fichiers a brièvement remplacé `logo.png` par une image corrompue (transcription base64 ratée, voir §6). Le dépôt GitHub, jamais touché, contenait toujours le fichier correct. Résolu en promouvant en production le déploiement Git existant (déjà construit à partir du bon `logo.png`) via le dashboard Vercel, sans jamais retransmettre le binaire manuellement — puis en vérifiant le fichier livré en production par comparaison de hash SHA-256 avec l'original.
 - **Cartes manquantes (Dragon Ball Super Card Game Fusion World)** : passe de recherche sur Cardmarket / dragonball.gg pour identifier des cartes "Son Goku SS3" absentes du catalogue ; ajout de 3 cartes (New Adventure FB05, Wish for Shenron FB07, Dual Evolution FB09) et remplacement d'une image basse résolution par une version plus grande. Catalogue confirmé : 83 cartes (était 80).
+- **Passe base officielle Bandai (23/09/2026)** :
+  - *Masters* : recherche des noms contenant « SS3 » / « Super Saiyan 3 » sur dbs-cardgame.com (51 résultats Goku, 29 numéros distincts) → les 29 étaient **déjà tous au catalogue**. Les variantes officielles (`_PR`, `_PR02`, `_BD`, `_SPR`) recoupent en grande partie les V.1/V.2/réimpressions Cardmarket déjà présentes ; non ajoutées faute de correspondance certaine.
+  - *Fusion World* : les cartes s'appellent « Son Goku » sans la forme → revue visuelle des 373 illustrations Goku officielles (recto, verso des Leaders, parallèles) avec `ai-server/tools/find_fw_ss3.py`. **32 cartes ajoutées directement** (11 nouvelles dont 2 Leaders à face éveillée SS3 et 3 promos `FP`, + 21 versions parallèles numérotées `-P1`, `-P2`…) et **1 en « Cartes à valider »** (FB09-081, forme SS3 incertaine). Nouvelle série `Promotion Cards (FP)` dans `game_sets`. Images et fiches : base officielle Bandai (`review_source = 'bandai-officiel'`).
+  - Le tri automatique par le modèle de vision local a été testé puis écarté (faux négatifs sur des SS3 évidents).
+  - ⚠️ **FB05-119** (« Son Goku (V.1 - Secret Rare) », déjà au catalogue) : les 5 versions officielles montrent un Goku **SS1** sur Namek, pas SS3. Laissée en place, à trancher par l'utilisateur.
 - **Ordre de tri des extensions Fusion World** : `game_sets.sort_order` mis à jour en base pour refléter l'ordre chronologique réel de sortie (du plus ancien — Awakened Pulse — au plus récent — Brightness of Hope). Le code de tri existait déjà et s'appuie sur cette colonne — seule la donnée a été corrigée.
 
 ## 8. Structure du fichier `index.html`
@@ -101,7 +106,7 @@ Le logo ("EDITION" + silhouette de Goku SS3, fond doré) est un fichier externe 
 
 ## 9. Pistes pour la suite
 
-- Continuer à enrichir le catalogue de référence (83 cartes actuellement) au fil des photos envoyées par l'utilisateur.
+- Continuer à enrichir le catalogue de référence (115 cartes au 23/09/2026) au fil des photos envoyées par l'utilisateur.
 - Pas de pagination sur les grilles — à surveiller si le catalogue grossit beaucoup au-delà de quelques centaines de cartes.
 - Pas d'écoute `onAuthStateChange` — un token expiré en cours de session n'est pas géré automatiquement (l'utilisateur doit recharger la page).
 - 9 images Carddass/DBH orphelines identifiées mais non intégrées au catalogue (à confirmer avec l'utilisateur avant ajout).
@@ -113,3 +118,40 @@ Le projet entre dans une phase de test utilisateur de plusieurs semaines, sur l'
 - **Suivi des bugs :** utiliser l'onglet **Issues** du dépôt GitHub plutôt qu'une conversation isolée, pour garder un historique daté et consultable d'une session à l'autre.
 - **Ce qui est considéré stable à ce stade :** authentification, catalogue de référence (affichage, filtres, tri), gestion de collection/wishlist (ajout, édition, photos), masquage de cartes, favicon/logo.
 - **Ce qui n'a pas encore été testé en usage réel prolongé :** comportement au-delà de quelques centaines de cartes (pas de pagination), gestion d'un token de session expiré en cours d'usage (pas d'écoute `onAuthStateChange`), montée en charge du bucket Storage `card-photos`.
+
+## 11. Prix Cardmarket (synchro quotidienne, depuis le 23/09/2026)
+
+Source : fichiers **officiels et publics** de Cardmarket (pas de scraping), jeu n°13 = Dragon Ball Super (Masters **et** Fusion World) :
+- catalogue : `https://downloads.s3.cardmarket.com/productCatalog/productList/products_singles_13.json`
+- guide des prix : `https://downloads.s3.cardmarket.com/productCatalog/priceGuide/price_guide_13.json` (régénéré par Cardmarket vers 02h50, heure de Paris)
+
+Carddass et Dragon Ball Heroes ne sont pas vendus sur Cardmarket : pas de prix pour ces jeux.
+
+### Fonctionnement
+- Fonction SQL `private.sync_cardmarket(13)` (schéma privé, non exposé par l'API, `security definer`) : télécharge les deux fichiers via l'extension `http`, met à jour les tables, écrit un journal.
+- Planifiée par **pg_cron** : job `cardmarket-daily-sync`, tous les jours à 05:15 UTC (07:15 à Paris l'été).
+- Lancer à la main : `select private.sync_cardmarket(13);` dans le SQL Editor Supabase.
+- Vérifier : `select * from cardmarket_sync_log order by run_at desc limit 5;`
+
+### Tables / vues (lecture seule pour les utilisateurs connectés, RLS)
+| Objet | Contenu |
+|---|---|
+| `cardmarket_products` | ~13 200 produits DBS (idProduct, nom anglais, idExpansion, idMetacard, date d'ajout, `first_seen_at`). |
+| `cardmarket_prices` | Dernier prix par produit : `trend`, `avg`, `low`, `avg1/7/30` + variantes `_foil`. |
+| `cardmarket_price_history` | Un point par jour, **uniquement pour les produits liés à une carte du catalogue**. |
+| `cardmarket_sync_log` | Journal de chaque exécution (ok / erreur, volumes, date du guide). |
+| `cards_with_prices` (vue) | Carte du catalogue + nom Cardmarket + prix du jour. |
+| `card_market_info` (vue) | **Vue à utiliser par le front** : 1 ligne par carte confirmée avec `price_eur`, `price_basis`, `cardmarket_url` (page produit ou recherche), `cardmarket_match`. Voir `docs/TASK-prix-cardmarket.md`. |
+| `cardmarket_goku_review_queue` (vue) | Produits « Goku » Cardmarket non liés au catalogue — file de travail pour trouver les SS3 manquantes. |
+
+### Lien carte ↔ produit Cardmarket
+- `cards.cardmarket_id` → `cardmarket_products.id_product`.
+- `cards.cardmarket_match` : `sure` (candidat unique), `probable` (déduit de l'extension / de l'ordre des versions V.1/V.2/V.3), `verified` (validé à la main).
+- 53 cartes liées au 23/09/2026. Le fichier Cardmarket ne donne ni le nom de l'extension ni la version (V.1, V.2…) : les liens `probable` sont à confirmer lors de la prochaine passe (en particulier **BT20-095-V3**, dont le prix ~5 800 € laisse penser à une version spéciale).
+- Non liées : cartes Masters sans équivalent clair (P-003 et variantes, SD2-02-ST-FOIL, SD17, BT24-138 SCR/GDR, BT24-033-C FR/Collector, BT3-035…), et tout Carddass / DBH.
+
+### Prochaine passe « SS3 manquantes »
+Tous les produits dont le **nom** Cardmarket contient « SS3 / Super Saiyan 3 Son Goku » sont déjà au catalogue. Les manques restants sont des cartes dont le nom ne mentionne pas SS3 :
+- Fusion World : ~137 numéros « Son Goku (FBxx-xxx) » non catalogués ;
+- Masters : ~445 produits « Son Goku, … » sans « SS3 » dans le nom.
+Il faut donc un contrôle **visuel** (image de la carte), par exemple via le serveur IA local (`ai-server/`), en partant de la vue `cardmarket_goku_review_queue`.
