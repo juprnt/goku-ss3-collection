@@ -33,7 +33,16 @@ sips -z 1024 1024 "$REPO/logo.png" --out assets/icon.png >/dev/null
 npx capacitor-assets generate --android --iconBackgroundColor '#0f1115' --iconBackgroundColorDark '#0f1115' \
   --splashBackgroundColor '#0f1115' --splashBackgroundColorDark '#0f1115' >/dev/null
 
+# Version de l'app = champ "version" de mobile/package.json (ex. "0.2").
+# versionCode doit augmenter à chaque version pour qu'Android accepte la mise à jour :
+# 0.2 -> 200, 0.2.1 -> 201, 1.3 -> 10300.
+VERSION=$(node -p "require('./package.json').version")
+IFS=. read -r V_MAJ V_MIN V_PAT <<< "$VERSION"
+VERSION_CODE=$(( ${V_MAJ:-0} * 10000 + ${V_MIN:-0} * 100 + ${V_PAT:-0} ))
+perl -pi -e "s/versionCode \d+/versionCode $VERSION_CODE/; s/versionName \"[^\"]*\"/versionName \"$VERSION\"/" android/app/build.gradle
+
 npx cap sync android
 (cd android && ./gradlew assembleDebug -q)
-cp android/app/build/outputs/apk/debug/app-debug.apk "$WS/GokuSS3.apk"
-echo "APK prêt : $WS/GokuSS3.apk"
+APK="$WS/GokuSS3-$VERSION.apk"
+cp android/app/build/outputs/apk/debug/app-debug.apk "$APK"
+echo "APK prêt : $APK (version $VERSION, code $VERSION_CODE)"

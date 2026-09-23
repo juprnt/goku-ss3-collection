@@ -6,8 +6,12 @@ L'app Android embarque le même `index.html` que le site Vercel, dans une WebVie
 ## Construire l'APK
 
 ```bash
-./build.sh   # -> ~/Developer/goku-ss3-mobile/GokuSS3.apk
+./build.sh   # -> ~/Developer/goku-ss3-mobile/GokuSS3-<version>.apk
 ```
+
+La version vient du champ `version` de `package.json` (ex. `"0.2"`) : `build.sh` l'écrit
+dans `versionName` et en déduit `versionCode` (0.2 → 200, 0.2.1 → 201). **Incrémenter la
+version avant chaque nouvel APK distribué**, sinon Android refuse la mise à jour.
 
 Prérequis (installés via Homebrew) : `node`, `openjdk@21`, cask `android-commandlinetools`
 avec `platform-tools`, `platforms;android-36`, `build-tools;36.0.0`.
