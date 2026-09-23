@@ -6,9 +6,10 @@ _Dernière mise à jour : 23 août 2026_
 
 Application web à page unique pour cataloguer et suivre une collection personnelle de cartes à jouer représentant **Son Goku en Super Saiyan 3**, toutes éditions et tous jeux Dragon Ball confondus (Carddass, Dragon Ball Heroes, Dragon Ball Super Card Game...).
 
-- **URL de production :** https://goku-ss3-collection.vercel.app/
+- **Distribution :** APK Android (`mobile/build.sh`, version dans `mobile/package.json`).
+- **Ancien site :** https://goku-ss3-collection.vercel.app/ — **abandonné** le 23/09/2026 (projet Vercel en pause, répond 503).
 - **Repo GitHub :** `juprnt/goku-ss3-collection`
-- **Projet Vercel :** `goku-ss3-collection` (équipe `juprnts-projects`)
+- **Projet Vercel :** `goku-ss3-collection` (équipe `juprnts-projects`) — **en pause / abandonné**
 - **Projet Supabase :** `goku-ss3-collection` (ref `vtdohksscretlbvhsgfo`, région `eu-west-3`)
 - **Statut :** en phase de test utilisateur (quelques semaines à partir du 23/08/2026) — voir §10.
 
@@ -23,7 +24,7 @@ Aucune dépendance npm, aucun système de build : modifier `index.html` (ou `log
 
 ## 3. Authentification
 
-Email + mot de passe via `supabase.auth` (`signUp` / `signInWithPassword`). Lien **Mot de passe oublié ?** (`resetPasswordForEmail`, retour sur l'URL courante) : à l'ouverture du lien reçu par email, l'événement `PASSWORD_RECOVERY` affiche un formulaire de nouveau mot de passe (`updateUser`). Prérequis côté Supabase : **Site URL** / **Redirect URLs** (Authentication › URL Configuration) doivent contenir `https://goku-ss3-collection.vercel.app`. Chaque compte est isolé : les données de collection (`collection_items`, `card_photos`, `hidden_cards`) sont scoping par `user_id` et protégées par RLS. Le catalogue de référence (`cards`, `games`, `game_sets`) est partagé entre tous les utilisateurs (lecture commune).
+Email + mot de passe via `supabase.auth` (`signUp` / `signInWithPassword`). **Mot de passe oublié ?** par **code** (depuis le 23/09/2026, pour ne plus dépendre d'un site web) : `resetPasswordForEmail(email)` envoie un e-mail contenant un code ; l'utilisateur le saisit dans l'app avec son nouveau mot de passe → `verifyOtp({ email, token, type: 'recovery' })` puis `updateUser({ password })`. **Prérequis Supabase** : le modèle d'e-mail *Reset Password* (Authentication › Emails) doit contenir `{{ .Token }}` (le modèle par défaut n'a qu'un lien, qui pointait vers l'ancien site Vercel). Chaque compte est isolé : les données de collection (`collection_items`, `card_photos`, `hidden_cards`) sont scoping par `user_id` et protégées par RLS. Le catalogue de référence (`cards`, `games`, `game_sets`) est partagé entre tous les utilisateurs (lecture commune).
 
 ## 4. Modèle de données (Supabase / Postgres, schéma `public`)
 
@@ -66,6 +67,8 @@ Table de jointure `user_id` + `card_id` : permet à un utilisateur de masquer un
 6. **Cartes à valider** — file de modération pour les cartes détectées automatiquement (pas encore dans le catalogue officiel), avec boutons Valider / Rejeter.
 
 ## 6. Déploiement
+
+> ⚠️ **Section historique — site abandonné le 23/09/2026 : projet Vercel `goku-ss3-collection` **mis en pause** (le site répond 503). L'app s'utilise désormais via l'**APK Android** (`mobile/`). Réactivable en un clic dans le dashboard Vercel si besoin.** Un `git push` sur `main` ne met plus rien en production ; pour livrer une modification de `index.html`, incrémenter `mobile/package.json` → `version` puis lancer `mobile/build.sh` et installer l'APK.
 
 Le projet Vercel **est lié au dépôt GitHub** `juprnt/goku-ss3-collection` (branche `main`). Tout `git push` sur `main` déclenche automatiquement un build et un déploiement en production — **il n'y a pas d'étape de préversion/staging intermédiaire**, le déploiement écrase directement `goku-ss3-collection.vercel.app`. À garder en tête pendant la période de test : une modification poussée sur `main` est visible par tout le monde immédiatement.
 

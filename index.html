@@ -279,12 +279,15 @@
       <button class="ghost" id="btn-forgot" style="width:100%;margin-top:8px;">Mot de passe oublié ?</button>
     </div>
     <div id="reset-form" class="hidden">
-      <p class="sub">Choisis ton nouveau mot de passe.</p>
+      <p class="sub" id="reset-intro">Un code t'a été envoyé par e-mail. Saisis-le puis choisis ton nouveau mot de passe.</p>
+      <label>Code reçu par e-mail</label>
+      <input type="text" id="reset-code" inputmode="numeric" autocomplete="one-time-code" maxlength="10" placeholder="123456" />
       <label>Nouveau mot de passe</label>
       <input type="password" id="reset-password" placeholder="6 caractères minimum" autocomplete="new-password" />
       <label>Confirmer le mot de passe</label>
       <input type="password" id="reset-password-confirm" placeholder="••••••••" autocomplete="new-password" />
       <div class="auth-toggle">
+        <button class="ghost" id="btn-reset-cancel" style="flex:1">Retour</button>
         <button class="primary" id="btn-reset" style="flex:1">Enregistrer</button>
       </div>
     </div>
@@ -479,12 +482,7 @@
 <script>
 const SUPABASE_URL = "https://vtdohksscretlbvhsgfo.supabase.co";
 const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZ0ZG9oa3NzY3JldGxidmhzZ2ZvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODcxNDc4OTcsImV4cCI6MjEwMjcyMzg5N30.ougiP2EyKdNQc2_9EzbHsVx4v8JucLz1PJITfTe_ULg";
-// Lu avant createClient : le SDK efface le jeton de l'URL après l'avoir traité.
-let passwordRecovery = /type=recovery/.test(location.hash);
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-sb.auth.onAuthStateChange(event => {
-  if (event === "PASSWORD_RECOVERY") { passwordRecovery = true; showResetForm(); }
-});
 
 let currentUser = null;
 let cardsCatalogue = [];   // confirmed catalogue rows only
@@ -539,42 +537,56 @@ async function onLoggedIn(user) {
 
 async function checkSession() {
   const { data } = await sb.auth.getSession();
-  if (passwordRecovery) { showResetForm(); return; }
   if (data.session) { await onLoggedIn(data.session.user); }
 }
 
-/* ---------- Mot de passe oublié ---------- */
+/* ---------- Mot de passe oublié ----------
+   Réinitialisation par code : Supabase envoie un code dans l'e-mail (modèle « Reset Password »
+   contenant {{ .Token }}), saisi ici avec le nouveau mot de passe. Aucun lien à ouvrir : ça
+   fonctionne dans l'app Android sans dépendre d'un site web. */
+let resetEmail = null;
+
 document.getElementById("btn-forgot").onclick = async () => {
   const email = document.getElementById("auth-email").value.trim();
   const msgEl = document.getElementById("auth-msg");
   if (!email) { msgEl.className = "err"; msgEl.textContent = "Renseigne ton email, puis clique à nouveau sur « Mot de passe oublié ? »."; return; }
-  const { error } = await sb.auth.resetPasswordForEmail(email, { redirectTo: (window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform()) ? "https://goku-ss3-collection.vercel.app/" : location.origin + location.pathname });
+  const { error } = await sb.auth.resetPasswordForEmail(email);
   if (error) { msgEl.className = "err"; msgEl.textContent = error.message; return; }
-  msgEl.className = "ok";
-  msgEl.textContent = "Email envoyé. Ouvre le lien qu'il contient pour choisir un nouveau mot de passe.";
-};
-
-function showResetForm() {
-  document.getElementById("app").style.display = "none";
-  document.getElementById("auth-screen").style.display = "";
+  resetEmail = email;
+  msgEl.className = ""; msgEl.textContent = "";
+  document.getElementById("reset-intro").textContent = `Un code a été envoyé à ${email}. Saisis-le puis choisis ton nouveau mot de passe.`;
   document.getElementById("login-form").classList.add("hidden");
   document.getElementById("reset-form").classList.remove("hidden");
+  document.getElementById("reset-code").focus();
+};
+
+function closeResetForm() {
+  resetEmail = null;
+  ["reset-code", "reset-password", "reset-password-confirm"].forEach(id => document.getElementById(id).value = "");
+  document.getElementById("reset-form").classList.add("hidden");
+  document.getElementById("login-form").classList.remove("hidden");
 }
 
+document.getElementById("btn-reset-cancel").onclick = () => {
+  closeResetForm();
+  const msgEl = document.getElementById("auth-msg"); msgEl.className = ""; msgEl.textContent = "";
+};
+
 document.getElementById("btn-reset").onclick = async () => {
+  const token = document.getElementById("reset-code").value.replace(/\s/g, "");
   const password = document.getElementById("reset-password").value;
   const confirm = document.getElementById("reset-password-confirm").value;
   const msgEl = document.getElementById("auth-msg");
   msgEl.className = "err";
+  if (!/^\d{6,10}$/.test(token)) { msgEl.textContent = "Saisis le code à chiffres reçu par e-mail."; return; }
   if (password.length < 6) { msgEl.textContent = "6 caractères minimum."; return; }
   if (password !== confirm) { msgEl.textContent = "Les deux mots de passe ne correspondent pas."; return; }
+  const { error: otpError } = await sb.auth.verifyOtp({ email: resetEmail, token, type: "recovery" });
+  if (otpError) { msgEl.textContent = "Code invalide ou expiré. Redemande un code avec « Mot de passe oublié ? »."; return; }
   const { data, error } = await sb.auth.updateUser({ password });
   if (error) { msgEl.textContent = error.message; return; }
-  passwordRecovery = false;
-  history.replaceState(null, "", location.pathname);
   msgEl.className = ""; msgEl.textContent = "";
-  document.getElementById("reset-form").classList.add("hidden");
-  document.getElementById("login-form").classList.remove("hidden");
+  closeResetForm();
   toast("Mot de passe mis à jour.", "ok");
   await onLoggedIn(data.user);
 };

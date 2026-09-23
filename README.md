@@ -1,5 +1,7 @@
 # Goku SS3 Collection
 
+> ⚠️ **Site web abandonné le 23/09/2026 : projet Vercel `goku-ss3-collection` **mis en pause** (le site répond 503). L'app s'utilise désormais via l'**APK Android** (`mobile/`). Réactivable en un clic dans le dashboard Vercel si besoin.**
+
 Application web mono-page (pas de framework, pas de build) pour cataloguer et gérer
 une collection personnelle de cartes "Son Goku Super Saiyan 3" (Dragon Ball Super
 Card Game et jeux apparentés).
@@ -12,10 +14,9 @@ Card Game et jeux apparentés).
   `vtdohksscretlbvhsgfo`, accédé côté client via le SDK
   [`@supabase/supabase-js`](https://github.com/supabase/supabase-js) chargé depuis le
   CDN unpkg (version épinglée, voir plus bas).
-- **Hébergement** : [Vercel](https://vercel.com), projet `goku-ss3-collection`, **lié
-  au dépôt GitHub `juprnt/goku-ss3-collection`**. Tout push sur `main` déclenche un
-  build et un déploiement automatique en production — il n'y a pas d'étape de
-  préversion/staging intermédiaire, le déploiement est direct.
+- **Hébergement** : ~~Vercel~~ — abandonné le 23/09/2026 (projet mis en pause). L'app est
+  distribuée comme APK Android construit par [`mobile/build.sh`](./mobile/build.sh) à partir
+  de `index.html`. Un push sur `main` ne publie donc plus rien.
 - **Auth** : email/mot de passe via Supabase Auth. La clé utilisée côté client
   (`SUPABASE_ANON_KEY`) est la clé publique anonyme — elle est censée être visible
   côté client ; la sécurité réelle des données repose sur les policies RLS
