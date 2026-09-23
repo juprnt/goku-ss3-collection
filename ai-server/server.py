@@ -54,7 +54,10 @@ app.add_middleware(
     allow_origins=ALLOWED_ORIGINS,
     allow_methods=["GET", "POST"],
     allow_headers=["Authorization", "Content-Type"],
+    # Chrome (Private Network Access) : autorise un site public à appeler l'adresse Tailscale privée.
+    allow_private_network=True,
 )
+
 http = httpx.AsyncClient(timeout=httpx.Timeout(300, connect=10))
 
 

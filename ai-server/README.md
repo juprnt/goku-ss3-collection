@@ -8,8 +8,30 @@ Goku SS3 (web aujourd'hui, Android ensuite). Ce dossier est exclu du déploiemen
 
 ```bash
 cp .env.example .env   # puis renseigner SUPABASE_ANON_KEY (la même que dans index.html)
-./run.sh               # http://localhost:8787 — page de test incluse
+./install.sh           # installe/met à jour le service qui démarre avec le Mac
 ```
+
+`install.sh` copie le serveur dans `~/.local/share/goku-ai-server/app` (macOS interdit aux
+services launchd de lire iCloud Drive) et l'enregistre comme LaunchAgent
+`com.goku.ai-server` (redémarrage automatique). **À relancer après chaque modification.**
+Journaux : `~/Library/Logs/goku-ai-server/server.log`. Pour un lancement ponctuel au premier
+plan : `./run.sh`.
+
+Ollama tourne lui aussi comme service : `brew services start ollama`.
+
+## Accès depuis le téléphone (Tailscale)
+
+Le serveur est exposé en HTTPS sur le réseau privé Tailscale :
+
+```bash
+/Applications/Tailscale.app/Contents/MacOS/Tailscale serve --bg --https=443 http://127.0.0.1:8787
+```
+
+→ `https://macmini-de-juli1.tail13a987.ts.net` (joignable uniquement par les appareils du
+tailnet). C'est cette adresse qu'utilise l'onglet **📷 Scanner & IA** de l'app
+(`AI_SERVER_URL` dans `index.html`). Le HTTPS est indispensable : l'app étant servie en
+HTTPS, le navigateur bloquerait un appel vers `http://`. `allow_private_network=True` dans
+la config CORS répond au contrôle *Private Network Access* de Chrome.
 
 Prérequis : `uv` (`brew install uv`) et Ollama avec le modèle `OLLAMA_MODEL` (vision requise).
 L'environnement Python est créé dans `~/.local/share/goku-ai-server/venv`, hors d'iCloud.

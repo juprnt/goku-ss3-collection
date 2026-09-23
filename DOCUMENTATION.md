@@ -59,10 +59,11 @@ Table de jointure `user_id` + `card_id` : permet à un utilisateur de masquer un
 ## 5. Fonctionnalités (onglets de l'app)
 
 1. **Tableau de bord** — statistiques : nombre de cartes possédées, quantité totale, valeur estimée, total dépensé, wishlist, taille du catalogue, répartition par jeu.
-2. **Ma collection** — liste des cartes possédées, recherche, filtres (jeu, état), vérification rapide "est-ce que je possède déjà cette carte ?", ajout/édition avec photos recto/verso.
-3. **Wishlist** — cartes souhaitées, recherche.
-4. **Catalogue de référence** — toutes les cartes connues. Deux menus déroulants **Jeu** et **Série** (tous deux "tout sélectionné" par défaut) filtrent une grille plate de cartes (3 colonnes en mobile, 4 en tablette, responsive au-delà), triée par jeu puis par ordre chronologique d'extension (`game_sets.sort_order`) ; case à cocher pour afficher les cartes masquées. Chaque carte a un badge Possédée/Manquante et un bouton Masquer/Réafficher.
-5. **Cartes à valider** — file de modération pour les cartes détectées automatiquement (pas encore dans le catalogue officiel), avec boutons Valider / Rejeter.
+2. **📷 Scanner & IA** — photo d'une carte (appareil photo ou galerie) → reconnaissance par le serveur IA local du Mac mini (voir `ai-server/README.md`) : cartes du catalogue correspondantes avec badge Possédée/Manquante, bouton **+ Ajouter** qui ouvre la fenêtre d'ajout pré-remplie avec la photo en recto. Plus une recherche en langage naturel (« mes cartes Masters en mauvais état »). Nécessite Tailscale actif sur l'appareil et le Mac mini allumé.
+3. **Ma collection** — liste des cartes possédées, recherche, filtres (jeu, état), vérification rapide "est-ce que je possède déjà cette carte ?", ajout/édition avec photos recto/verso.
+4. **Wishlist** — cartes souhaitées, recherche.
+5. **Catalogue de référence** — toutes les cartes connues. Deux menus déroulants **Jeu** et **Série** (tous deux "tout sélectionné" par défaut) filtrent une grille plate de cartes (3 colonnes en mobile, 4 en tablette, responsive au-delà), triée par jeu puis par ordre chronologique d'extension (`game_sets.sort_order`) ; case à cocher pour afficher les cartes masquées. Chaque carte a un badge Possédée/Manquante et un bouton Masquer/Réafficher.
+6. **Cartes à valider** — file de modération pour les cartes détectées automatiquement (pas encore dans le catalogue officiel), avec boutons Valider / Rejeter.
 
 ## 6. Déploiement
 
