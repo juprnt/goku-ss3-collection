@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Goku SS3 — test IA</title>
+<style>
+  :root { --bg:#0f1115; --panel:#1a1d24; --text:#e8e8ea; --muted:#9aa0aa; --accent:#f5b301; --ok:#3fb950; --err:#f85149; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--text); font:15px/1.45 system-ui,-apple-system,sans-serif; padding:16px; max-width:760px; margin-inline:auto; }
+  h1 { font-size:20px; margin:0 0 4px; } h2 { font-size:16px; margin:0 0 10px; }
+  section { background:var(--panel); border-radius:12px; padding:16px; margin-top:14px; }
+  input, button { font:inherit; padding:10px 12px; border-radius:8px; border:1px solid #333a45; background:#0f1115; color:var(--text); width:100%; margin-top:6px; }
+  button { background:var(--accent); color:#111; font-weight:600; border:0; cursor:pointer; }
+  button:disabled { opacity:.5; cursor:wait; }
+  .muted { color:var(--muted); font-size:13px; }
+  .cand { display:flex; gap:12px; align-items:center; padding:8px 0; border-top:1px solid #2a2f38; }
+  .cand img { width:64px; border-radius:6px; }
+  .tag { display:inline-block; padding:1px 8px; border-radius:99px; font-size:12px; margin-left:6px; }
+  .own { background:var(--ok); color:#111; } .miss { background:#333a45; } .best { background:var(--accent); color:#111; }
+  pre { white-space:pre-wrap; word-break:break-word; font-size:12px; color:var(--muted); }
+  #preview { max-width:180px; border-radius:8px; margin-top:8px; display:none; }
+  .hidden { display:none; }
+</style>
+</head>
+<body>
+<h1>Goku SS3 — test du serveur IA</h1>
+<div class="muted" id="health">Vérification du serveur…</div>
+
+<section id="login">
+  <h2>Connexion (compte de l'app)</h2>
+  <input id="email" type="email" placeholder="Email" autocomplete="username">
+  <input id="password" type="password" placeholder="Mot de passe" autocomplete="current-password">
+  <button id="login-btn">Se connecter</button>
+</section>
+
+<div id="app" class="hidden">
+  <section>
+    <h2>Reconnaître une carte</h2>
+    <input id="photo" type="file" accept="image/*" capture="environment">
+    <img id="preview" alt="">
+    <button id="identify-btn">Identifier</button>
+    <div id="identify-out"></div>
+  </section>
+  <section>
+    <h2>Rechercher en langage naturel</h2>
+    <input id="query" placeholder="ex. mes cartes Masters en mauvais état">
+    <button id="search-btn">Rechercher</button>
+    <div id="search-out"></div>
+  </section>
+</div>
+
+<script src="https://unpkg.com/@supabase/supabase-js@2.112.3"></script>
+<script>
+const SUPABASE_URL = "https://vtdohksscretlbvhsgfo.supabase.co";
+const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZ0ZG9oa3NzY3JldGxidmhzZ2ZvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODcxNDc4OTcsImV4cCI6MjEwMjcyMzg5N30.ougiP2EyKdNQc2_9EzbHsVx4v8JucLz1PJITfTe_ULg";
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+
+async function api(path, opts = {}) {
+  const { data } = await sb.auth.getSession();
+  const res = await fetch(path, { ...opts, headers: { ...(opts.headers || {}), Authorization: "Bearer " + data.session.access_token } });
+  const body = await res.json();
+  if (!res.ok) throw new Error(body.detail || res.statusText);
+  return body;
+}
+
+async function busy(btn, fn) {
+  btn.disabled = true; const label = btn.textContent; btn.textContent = "En cours…";
+  try { await fn(); } catch (e) { alert(e.message); } finally { btn.disabled = false; btn.textContent = label; }
+}
+
+fetch("/health").then(r => r.json()).then(h => {
+  $("health").textContent = h.ok ? `Serveur OK — modèle ${h.model}` : `Problème : ${h.ollama || "modèle " + h.model + " absent"}`;
+});
+
+sb.auth.getSession().then(({ data }) => { if (data.session) showApp(); });
+function showApp() { $("login").classList.add("hidden"); $("app").classList.remove("hidden"); }
+
+$("login-btn").onclick = () => busy($("login-btn"), async () => {
+  const { error } = await sb.auth.signInWithPassword({ email: $("email").value, password: $("password").value });
+  if (error) throw error;
+  showApp();
+});
+
+$("photo").onchange = () => {
+  const f = $("photo").files[0]; if (!f) return;
+  $("preview").src = URL.createObjectURL(f); $("preview").style.display = "block";
+};
+
+$("identify-btn").onclick = () => busy($("identify-btn"), async () => {
+  const f = $("photo").files[0]; if (!f) throw new Error("Choisis une photo d'abord");
+  const fd = new FormData(); fd.append("photo", f);
+  const r = await api("/identify", { method: "POST", body: fd });
+  const ex = r.extracted;
+  $("identify-out").innerHTML = `
+    <p class="muted">Lu en ${r.llm_seconds}s — ${esc(ex.game)} · n° ${esc(ex.card_number) || "?"} · ${esc(ex.card_name) || "?"} · confiance ${Math.round(ex.confidence * 100)}%</p>
+    ${r.candidates.length ? r.candidates.map(c => `
+      <div class="cand">
+        ${c.card.official_image_url ? `<img src="${esc(c.card.official_image_url)}" alt="">` : ""}
+        <div><strong>${esc(c.card.card_name)}</strong> ${esc(c.card.card_number || "")}
+          ${c.card.id === r.best_match_id ? '<span class="tag best">Meilleure correspondance</span>' : ""}
+          <span class="tag ${c.owned_qty ? "own" : "miss"}">${c.owned_qty ? "Possédée ×" + c.owned_qty : "Manquante"}</span>
+          ${c.wishlist ? '<span class="tag miss">Wishlist</span>' : ""}
+          <div class="muted">${esc(c.card.set_name || "")} — score ${c.score}</div></div>
+      </div>`).join("") : "<p>Aucune carte du catalogue ne correspond.</p>"}
+    <details><summary class="muted">Détail brut</summary><pre>${esc(JSON.stringify(ex, null, 2))}</pre></details>`;
+});
+
+$("search-btn").onclick = () => busy($("search-btn"), async () => {
+  const r = await api("/search", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ query: $("query").value }) });
+  $("search-out").innerHTML = `
+    <p class="muted">${r.count} résultat(s)</p>
+    ${r.results.map(i => { const c = i.cards || i; return `<div class="cand">
+      ${c.official_image_url ? `<img src="${esc(c.official_image_url)}" alt="">` : ""}
+      <div><strong>${esc(c.card_name || i.custom_name)}</strong> ${esc(c.card_number || "")}
+      <div class="muted">${esc(c.set_name || "")}${i.condition ? " · " + esc(i.condition) : ""}${i.estimated_value ? " · " + i.estimated_value + " €" : ""}</div></div></div>`; }).join("")}
+    <details><summary class="muted">Filtres compris par l'IA</summary><pre>${esc(JSON.stringify(r.filters, null, 2))}</pre></details>`;
+});
+$("query").onkeydown = e => { if (e.key === "Enter") $("search-btn").click(); };
+</script>
+</body>
+</html>

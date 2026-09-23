@@ -1,0 +1,13 @@
+[project]
+name = "goku-ai-server"
+version = "0.1.0"
+description = "Serveur IA local (Mac mini + Ollama) pour l'app Goku SS3 Collection"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.30",
+    "httpx>=0.27",
+    "pillow>=10.4",
+    "python-multipart>=0.0.9",
+    "python-dotenv>=1.0",
+]

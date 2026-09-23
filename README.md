@@ -29,6 +29,7 @@ Card Game et jeux apparentés).
 | `logo.png`           | Logo de l'app, utilisé comme favicon, apple-touch-icon et logo UI.  |
 | `README.md`          | Ce fichier — vue d'ensemble rapide.                                  |
 | `DOCUMENTATION.md`   | Documentation détaillée (schéma de données, historique complet, déploiement). |
+| `ai-server/`         | Serveur IA local (Mac mini + Ollama) : reconnaissance de cartes et recherche en langage naturel. Exclu du déploiement Vercel via `.vercelignore`. Voir [`ai-server/README.md`](./ai-server/README.md). |
 
 ## Tables Supabase utilisées
 
