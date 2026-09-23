@@ -9,6 +9,24 @@ export JAVA_HOME=/opt/homebrew/opt/openjdk@21
 export ANDROID_HOME=/opt/homebrew/share/android-commandlinetools
 export PATH="$JAVA_HOME/bin:/opt/homebrew/bin:$PATH"
 
+# Clé de signature : Android n'accepte une mise à jour (en gardant la session et les données
+# de l'app) que si le nouvel APK est signé avec la même clé. Gradle signe avec
+# ~/.android/debug.keystore ; on en garde une copie ici (iCloud, même clé que PAPS IA) et on
+# la remet en place si elle manque (nouveau Mac, dossier effacé). Si les deux diffèrent, on
+# s'arrête : l'APK obligerait à désinstaller l'app.
+# La copie n'est PAS versionnée (mobile/.gitignore) : le dépôt GitHub est public.
+KEYSTORE="$HOME/.android/debug.keystore"
+if [ ! -f "$REPO/mobile/signing.keystore" ]; then
+  echo "mobile/signing.keystore manquant (copie iCloud de la clé de signature). Le recopier depuis PAPS IA/mobile/."
+  exit 1
+elif [ ! -f "$KEYSTORE" ]; then
+  mkdir -p "$HOME/.android" && cp "$REPO/mobile/signing.keystore" "$KEYSTORE"
+elif ! cmp -s "$KEYSTORE" "$REPO/mobile/signing.keystore"; then
+  echo "~/.android/debug.keystore diffère de mobile/signing.keystore : l'APK ne pourrait pas mettre à jour l'app installée."
+  echo "Restaurer la clé : cp \"$REPO/mobile/signing.keystore\" \"$KEYSTORE\""
+  exit 1
+fi
+
 mkdir -p "$WS/www" "$WS/assets"
 cp "$REPO/mobile/package.json" "$REPO/mobile/capacitor.config.json" "$WS/"
 cp "$REPO/index.html" "$REPO/logo.png" "$WS/www/"

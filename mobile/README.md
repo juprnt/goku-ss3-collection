@@ -13,6 +13,12 @@ La version vient du champ `version` de `package.json` (ex. `"0.2"`) : `build.sh`
 dans `versionName` et en déduit `versionCode` (0.2 → 200, 0.2.1 → 201). **Incrémenter la
 version avant chaque nouvel APK distribué**, sinon Android refuse la mise à jour.
 
+**Clé de signature** : Android n'installe une mise à jour que si l'APK est signé avec la même
+clé que l'app déjà installée. `build.sh` vérifie que `~/.android/debug.keystore` est identique
+à `mobile/signing.keystore` (copie gardée dans iCloud, même clé que PAPS IA) : il la remet en
+place si elle manque et s'arrête si elle diffère. Ce fichier est **exclu de git**
+(`mobile/.gitignore`) car le dépôt GitHub est public : ne jamais le committer.
+
 Prérequis (installés via Homebrew) : `node`, `openjdk@21`, cask `android-commandlinetools`
 avec `platform-tools`, `platforms;android-36`, `build-tools;36.0.0`.
 
