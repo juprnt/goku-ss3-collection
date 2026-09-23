@@ -173,7 +173,7 @@
     .card-tile .info .tags { gap: 3px; }
     .tag { font-size: 9px; padding: 1px 5px; }
     .badge { font-size: 9.5px; padding: 2px 6px; }
-    .cm-link { font-size: 9.5px; }
+    .cm-link, .vt-link { font-size: 9.5px; }
     .card-tile .actions { flex-direction: column; padding: 0 6px 6px; gap: 4px; }
     .card-tile .actions button { font-size: 10.5px; padding: 6px 4px; }
     #user-email { display: none; }
@@ -228,7 +228,8 @@
   .market { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; margin-top: 4px; min-width: 0; }
   .tag.price { color: var(--green); border-color: rgba(53,196,106,0.4); background: rgba(53,196,106,0.1); font-weight: 700; }
   .cm-link { font-size: 11px; color: var(--orange); text-decoration: none; white-space: nowrap; }
-  .cm-link:hover { text-decoration: underline; }
+  .cm-link:hover, .vt-link:hover { text-decoration: underline; }
+  .vt-link { font-size: 11px; color: #09b1ba; text-decoration: none; white-space: nowrap; }
   .stat-card .sub { font-size: 11.5px; color: var(--text-dim); margin-top: 4px; }
 
   /* Scanner & IA */
@@ -632,18 +633,35 @@ function marketPrice(cardId) {
   return m && m.price_eur != null ? Number(m.price_eur) : null;
 }
 
-function marketHtml(cardId) {
+// Recherche Vinted pour une carte manquante. Testé sur vinted.fr (09/2026) : le numéro seul
+// remonte des objets sans rapport et le filtre de catégorie dégrade la pertinence ; le numéro
+// sans suffixe de rareté + « goku » (+ « ss3 » pour Masters, où les vendeurs l'écrivent)
+// donne les meilleurs résultats. Tri par pertinence (défaut de Vinted).
+function vintedUrl(card) {
+  if (!card) return null;
+  const base = ((card.card_number || "").match(/^[A-Z]+\d*-\d+/) || [""])[0];
+  let q;
+  if (card.game_slug === "dbscg-fusion") q = base ? `${base} goku` : "dragon ball fusion world goku ss3";
+  else if (card.game_slug === "dbscg-masters") q = base ? `${base} goku ss3` : "dragon ball super card game goku ss3";
+  else if (card.game_slug === "carddass") q = "carddass goku super saiyan 3";
+  else if (card.game_slug === "dbh") q = "dragon ball heroes goku ss3" + (base ? " " + base : "");
+  else q = card.custom_name || card.card_name;  // item hors catalogue : son nom personnalisé
+  return q ? "https://www.vinted.fr/catalog?search_text=" + encodeURIComponent(q) : null;
+}
+
+// Prix / lien Cardmarket, et lien Vinted si `vintedCard` est fourni (cartes manquantes).
+function marketHtml(cardId, vintedCard = null) {
   const m = cardId ? marketInfo.get(cardId) : null;
-  if (!m) return "";
-  const title = [m.price_basis, m.price_date ? "Cardmarket " + m.price_date : "", m.cardmarket_match === "probable" ? "lien à vérifier" : ""]
-    .filter(Boolean).join(" · ");
-  const price = m.price_eur != null
-    ? `<span class="tag price" title="${escapeHtml(title)}">${Number(m.price_eur).toFixed(2)} €</span>`
-    : "";
-  const link = m.cardmarket_url
-    ? `<a class="cm-link" href="${escapeHtml(m.cardmarket_url)}" target="_blank" rel="noopener noreferrer">Cardmarket ↗</a>`
-    : "";
-  return price || link ? `<div class="market">${price}${link}</div>` : "";
+  let price = "", link = "";
+  if (m) {
+    const title = [m.price_basis, m.price_date ? "Cardmarket " + m.price_date : "", m.cardmarket_match === "probable" ? "lien à vérifier" : ""]
+      .filter(Boolean).join(" · ");
+    if (m.price_eur != null) price = `<span class="tag price" title="${escapeHtml(title)}">${Number(m.price_eur).toFixed(2)} €</span>`;
+    if (m.cardmarket_url) link = `<a class="cm-link" href="${escapeHtml(m.cardmarket_url)}" target="_blank" rel="noopener noreferrer">Cardmarket ↗</a>`;
+  }
+  const vUrl = vintedUrl(vintedCard);
+  const vinted = vUrl ? `<a class="vt-link" href="${escapeHtml(vUrl)}" target="_blank" rel="noopener noreferrer">Vinted ↗</a>` : "";
+  return price || link || vinted ? `<div class="market">${price}${link}${vinted}</div>` : "";
 }
 
 async function loadHiddenCards() {
@@ -897,7 +915,7 @@ async function renderGrid(containerId, items, isCollectionItem) {
           ${item.quantity > 1 ? `<span class="tag">x${item.quantity}</span>` : ""}
           ${item.language_override ? `<span class="tag">${escapeHtml(item.language_override)}</span>` : ""}
         </div>
-        ${marketHtml(item.card_id)}
+        ${marketHtml(item.card_id, item.status === "wishlist" ? (item.cards || item) : null)}
       </div>
       <div class="actions">
         <button class="secondary" data-edit="${item.id}">Modifier</button>
@@ -924,7 +942,7 @@ function cardTileHtml(c, owned, isHidden) {
           <span class="badge ${owned ? "owned" : "missing"}">${owned ? "Possédée" : "Manquante"}</span>
           ${isHidden ? `<span class="tag">Masquée</span>` : ""}
         </div>
-        ${marketHtml(c.id)}
+        ${marketHtml(c.id, owned ? null : c)}
       </div>
       <div class="actions">
         ${owned ? "" : `<button class="primary" data-quickadd="${c.id}">+ Ajouter</button>`}
@@ -1350,7 +1368,7 @@ function aiCardRowHtml(c, { best = false, note = "" } = {}) {
           ${inWishlist(c.id) ? `<span class="tag">Wishlist</span>` : ""}
           ${note ? `<span class="tag">${escapeHtml(note)}</span>` : ""}
         </div>
-        ${marketHtml(c.id)}
+        ${marketHtml(c.id, qty ? null : c)}
       </div>
       <div class="btns">
         <button class="primary" data-ai-add="${c.id}" data-ai-status="owned">+ Ajouter</button>

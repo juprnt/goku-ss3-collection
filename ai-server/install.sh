@@ -13,7 +13,7 @@ LOGS="$HOME/Library/Logs/goku-ai-server"
 
 mkdir -p "$APP" "$LOGS"
 rsync -a --delete --exclude .gitignore --exclude README.md --exclude install.sh \
-  "$SRC/server.py" "$SRC/pyproject.toml" "$SRC/uv.lock" "$SRC/.env" "$SRC/run.sh" "$SRC/static" "$APP/"
+  "$SRC/server.py" "$SRC/pyproject.toml" "$SRC/uv.lock" "$SRC/.env" "$SRC/run.sh" "$SRC/static" "$SRC/tools" "$APP/"
 
 cat > "$PLIST" <<EOF
 <?xml version="1.0" encoding="UTF-8"?>
@@ -38,3 +38,34 @@ if launchctl print "gui/$(id -u)/$LABEL" >/dev/null 2>&1; then
 fi
 launchctl bootstrap "gui/$(id -u)" "$PLIST"
 echo "Serveur installé dans $APP — journaux : $LOGS/server.log"
+
+# Veille quotidienne des nouvelles cartes Bandai (tools/watch_bandai.py), tous les jours à 08:00.
+WATCH_LABEL="com.goku.bandai-watch"
+WATCH_PLIST="$HOME/Library/LaunchAgents/$WATCH_LABEL.plist"
+cat > "$WATCH_PLIST" <<PLIST
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>$WATCH_LABEL</string>
+  <key>WorkingDirectory</key><string>$APP</string>
+  <key>ProgramArguments</key><array>
+    <string>/opt/homebrew/bin/uv</string><string>run</string><string>--python</string><string>3.12</string>
+    <string>python</string><string>tools/watch_bandai.py</string>
+  </array>
+  <key>EnvironmentVariables</key><dict>
+    <key>PATH</key><string>/opt/homebrew/bin:/usr/bin:/bin</string>
+    <key>UV_PROJECT_ENVIRONMENT</key><string>$BASE/venv</string>
+  </dict>
+  <key>StartCalendarInterval</key><dict><key>Hour</key><integer>8</integer><key>Minute</key><integer>0</integer></dict>
+  <key>StandardOutPath</key><string>$LOGS/bandai-watch.log</string>
+  <key>StandardErrorPath</key><string>$LOGS/bandai-watch.log</string>
+</dict>
+</plist>
+PLIST
+if launchctl print "gui/$(id -u)/$WATCH_LABEL" >/dev/null 2>&1; then
+  launchctl bootout "gui/$(id -u)/$WATCH_LABEL"
+  while launchctl print "gui/$(id -u)/$WATCH_LABEL" >/dev/null 2>&1; do sleep 0.5; done
+fi
+launchctl bootstrap "gui/$(id -u)" "$WATCH_PLIST"
+echo "Veille Bandai : tous les jours à 08:00 — journal : $LOGS/bandai-watch.log"
