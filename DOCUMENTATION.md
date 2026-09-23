@@ -58,11 +58,11 @@ Table de jointure `user_id` + `card_id` : permet à un utilisateur de masquer un
 
 ## 5. Fonctionnalités (onglets de l'app)
 
-1. **Tableau de bord** — statistiques : nombre de cartes possédées, quantité totale, valeur estimée, total dépensé, wishlist, taille du catalogue, répartition par jeu.
+1. **Tableau de bord** — statistiques : nombre de cartes possédées, quantité totale, valeur estimée, total dépensé, wishlist, taille du catalogue, répartition par jeu. La **valeur estimée** utilise la valeur saisie sur l'item, sinon le prix Cardmarket du jour × quantité (calcul en mémoire, jamais écrit dans `collection_items`) ; sous-titre « dont X € selon Cardmarket (N cartes) ».
 2. **📷 Scanner & IA** — photo d'une carte (appareil photo ou galerie) → reconnaissance par le serveur IA local du Mac mini (voir `ai-server/README.md`) : cartes du catalogue correspondantes avec badge Possédée/Manquante, bouton **+ Ajouter** qui ouvre la fenêtre d'ajout pré-remplie avec la photo en recto. Plus une recherche en langage naturel (« mes cartes Masters en mauvais état »). Nécessite Tailscale actif sur l'appareil et le Mac mini allumé.
-3. **Ma collection** — liste des cartes possédées, recherche, filtres (jeu, état), vérification rapide "est-ce que je possède déjà cette carte ?", ajout/édition avec photos recto/verso.
-4. **Wishlist** — cartes souhaitées, recherche.
-5. **Catalogue de référence** — toutes les cartes connues. Deux menus déroulants **Jeu** et **Série** (tous deux "tout sélectionné" par défaut) filtrent une grille plate de cartes (3 colonnes jusqu'à 480 px de large — téléphone, écran externe du Galaxy Z Fold —, 5 colonnes de 481 à 1100 px — écran interne déplié du Fold, petite tablette —, colonnes de ~220 px au-delà), triée par jeu puis par ordre chronologique d'extension (`game_sets.sort_order`) ; case à cocher pour afficher les cartes masquées. Chaque carte a un badge Possédée/Manquante et un bouton Masquer/Réafficher.
+3. **Ma collection** — liste des cartes possédées (avec prix Cardmarket et lien quand la carte est liée), recherche, filtres (jeu, état), vérification rapide "est-ce que je possède déjà cette carte ?", ajout/édition avec photos recto/verso.
+4. **Wishlist** — cartes souhaitées, recherche, prix Cardmarket et lien.
+5. **Catalogue de référence** — toutes les cartes connues. Deux menus déroulants **Jeu** et **Série** (tous deux "tout sélectionné" par défaut) filtrent une grille plate de cartes (3 colonnes jusqu'à 480 px de large — téléphone, écran externe du Galaxy Z Fold —, 5 colonnes de 481 à 1100 px — écran interne déplié du Fold, petite tablette —, colonnes de ~220 px au-delà), triée par jeu puis par ordre chronologique d'extension (`game_sets.sort_order`) ; case à cocher pour afficher les cartes masquées. Chaque carte a un badge Possédée/Manquante, le **prix Cardmarket du jour** (infobulle : base du prix, date, « lien à vérifier » si correspondance `probable`) avec un lien **Cardmarket ↗**, et un bouton Masquer/Réafficher.
 6. **Cartes à valider** — file de modération pour les cartes détectées automatiquement (pas encore dans le catalogue officiel), avec boutons Valider / Rejeter.
 
 ## 6. Déploiement
@@ -143,6 +143,13 @@ Carddass et Dragon Ball Heroes ne sont pas vendus sur Cardmarket : pas de prix p
 | `cards_with_prices` (vue) | Carte du catalogue + nom Cardmarket + prix du jour. |
 | `card_market_info` (vue) | **Vue à utiliser par le front** : 1 ligne par carte confirmée avec `price_eur`, `price_basis`, `cardmarket_url` (page produit ou recherche), `cardmarket_match`. Voir `docs/TASK-prix-cardmarket.md`. |
 | `cardmarket_goku_review_queue` (vue) | Produits « Goku » Cardmarket non liés au catalogue — file de travail pour trouver les SS3 manquantes. |
+
+### Affichage dans l'app (depuis le 23/09/2026)
+- `loadMarketInfo()` lit la vue `card_market_info` en parallèle du reste dans `loadAll()` → `marketInfo` (Map `card_id` → ligne). En cas d'erreur : simple `console.warn`, l'app se charge normalement sans prix.
+- `marketHtml(cardId)` : badge prix vert + lien `Cardmarket ↗` (`target="_blank"`), utilisé dans les tuiles du Catalogue, de Ma collection / Wishlist et des résultats du Scanner. Rien n'est affiché pour les cartes sans prix ni lien (Carddass, DBH, cartes non liées).
+- Tableau de bord : `estimated_value` de l'item, sinon `price_eur` de Cardmarket (`marketPrice(card_id)`).
+- App Android : un lien `target="_blank"` ouvre bien le navigateur du téléphone (vérifié dans l'émulateur), rien de spécifique à Capacitor.
+- Les 32 cartes Fusion World ajoutées le 23/09/2026 (parallèles, promos FP…) ne sont pas encore liées à un produit Cardmarket : pas de prix pour elles tant que `cards.cardmarket_id` n'est pas renseigné.
 
 ### Lien carte ↔ produit Cardmarket
 - `cards.cardmarket_id` → `cardmarket_products.id_product`.

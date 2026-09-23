@@ -1,3 +1,5 @@
+> ✅ **Réalisée le 23/09/2026** — voir `DOCUMENTATION.md` §11 « Affichage dans l'app ».
+
 # Tâche : afficher le prix Cardmarket et un lien cliquable sur les cartes
 
 _Préparée le 23/09/2026. Toute la partie base de données est déjà faite et en production. Il ne reste que le front (`index.html`)._

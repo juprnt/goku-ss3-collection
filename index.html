@@ -173,6 +173,7 @@
     .card-tile .info .tags { gap: 3px; }
     .tag { font-size: 9px; padding: 1px 5px; }
     .badge { font-size: 9.5px; padding: 2px 6px; }
+    .cm-link { font-size: 9.5px; }
     .card-tile .actions { flex-direction: column; padding: 0 6px 6px; gap: 4px; }
     .card-tile .actions button { font-size: 10.5px; padding: 6px 4px; }
     #user-email { display: none; }
@@ -222,6 +223,13 @@
   .toast { background: var(--card); border: 1px solid var(--border); border-left: 3px solid var(--orange); padding: 12px 16px; border-radius: 8px; font-size: 13px; box-shadow: 0 6px 20px rgba(0,0,0,0.4); }
   .toast.err { border-left-color: var(--red); }
   .toast.ok { border-left-color: var(--green); }
+
+  /* Prix Cardmarket (vue card_market_info) */
+  .market { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; margin-top: 4px; min-width: 0; }
+  .tag.price { color: var(--green); border-color: rgba(53,196,106,0.4); background: rgba(53,196,106,0.1); font-weight: 700; }
+  .cm-link { font-size: 11px; color: var(--orange); text-decoration: none; white-space: nowrap; }
+  .cm-link:hover { text-decoration: underline; }
+  .stat-card .sub { font-size: 11.5px; color: var(--text-dim); margin-top: 4px; }
 
   /* Scanner & IA */
   .ai-status { font-size: 12.5px; color: var(--text-dim); margin: 0 0 14px; }
@@ -309,7 +317,7 @@
       <div class="stat-grid">
         <div class="stat-card"><div class="label">Cartes possédées</div><div class="value orange" id="stat-owned-count">0</div></div>
         <div class="stat-card"><div class="label">Exemplaires (qté totale)</div><div class="value" id="stat-owned-qty">0</div></div>
-        <div class="stat-card"><div class="label">Valeur estimée</div><div class="value green" id="stat-value">0 €</div></div>
+        <div class="stat-card"><div class="label">Valeur estimée</div><div class="value green" id="stat-value">0 €</div><div class="sub hidden" id="stat-value-sub"></div></div>
         <div class="stat-card"><div class="label">Total dépensé</div><div class="value" id="stat-spent">0 €</div></div>
         <div class="stat-card"><div class="label">En wishlist</div><div class="value" id="stat-wishlist">0</div></div>
         <div class="stat-card"><div class="label">Cartes au catalogue</div><div class="value" id="stat-catalogue">0</div></div>
@@ -480,6 +488,7 @@ sb.auth.onAuthStateChange(event => {
 
 let currentUser = null;
 let cardsCatalogue = [];   // confirmed catalogue rows only
+let marketInfo = new Map(); // card_id -> ligne de la vue card_market_info (prix / lien Cardmarket)
 let cardsPendingReview = []; // review_status = 'pending_review' rows
 let collectionItems = [];  // full collection_items rows (joined with cards)
 let hiddenCardIds = new Set(); // card ids the current user has hidden from the catalogue
@@ -582,7 +591,7 @@ document.querySelectorAll("nav.tabs .tab").forEach(btn => {
 
 /* ---------- Data loading ---------- */
 async function loadAll() {
-  await Promise.all([loadCatalogue(), loadPendingReview(), loadCollection(), loadHiddenCards(), loadGamesHierarchy()]);
+  await Promise.all([loadCatalogue(), loadPendingReview(), loadCollection(), loadHiddenCards(), loadGamesHierarchy(), loadMarketInfo()]);
   renderDashboard();
   renderCollectionGrid();
   renderWishlistGrid();
@@ -596,6 +605,33 @@ async function loadCatalogue() {
   const { data, error } = await sb.from("cards").select("*").eq("review_status", "confirmed").order("game").order("set_name");
   if (error) { toast("Erreur chargement catalogue: " + error.message, "err"); return; }
   cardsCatalogue = data || [];
+}
+
+// Prix et liens Cardmarket (mis à jour chaque nuit côté Supabase). Non bloquant : sans ces
+// données, l'app fonctionne normalement, simplement sans prix.
+async function loadMarketInfo() {
+  const { data, error } = await sb.from("card_market_info").select("*");
+  if (error) { console.warn("Prix Cardmarket indisponibles:", error.message); return; }
+  marketInfo = new Map((data || []).map(r => [r.card_id, r]));
+}
+
+function marketPrice(cardId) {
+  const m = cardId ? marketInfo.get(cardId) : null;
+  return m && m.price_eur != null ? Number(m.price_eur) : null;
+}
+
+function marketHtml(cardId) {
+  const m = cardId ? marketInfo.get(cardId) : null;
+  if (!m) return "";
+  const title = [m.price_basis, m.price_date ? "Cardmarket " + m.price_date : "", m.cardmarket_match === "probable" ? "lien à vérifier" : ""]
+    .filter(Boolean).join(" · ");
+  const price = m.price_eur != null
+    ? `<span class="tag price" title="${escapeHtml(title)}">${Number(m.price_eur).toFixed(2)} €</span>`
+    : "";
+  const link = m.cardmarket_url
+    ? `<a class="cm-link" href="${escapeHtml(m.cardmarket_url)}" target="_blank" rel="noopener noreferrer">Cardmarket ↗</a>`
+    : "";
+  return price || link ? `<div class="market">${price}${link}</div>` : "";
 }
 
 async function loadHiddenCards() {
@@ -667,12 +703,24 @@ function renderDashboard() {
   const owned = collectionItems.filter(i => i.status === "owned");
   const wishlist = collectionItems.filter(i => i.status === "wishlist");
   const totalQty = owned.reduce((s, i) => s + (i.quantity || 0), 0);
-  const totalValue = owned.reduce((s, i) => s + (Number(i.estimated_value) || 0) * (i.quantity || 1), 0);
+  // Valeur saisie par l'utilisateur en priorité, sinon prix Cardmarket du jour (jamais écrit en base).
+  let marketPart = 0, marketCount = 0;
+  const totalValue = owned.reduce((s, i) => {
+    let unit = Number(i.estimated_value) || 0;
+    if (!unit) {
+      const mp = marketPrice(i.card_id);
+      if (mp) { unit = mp; marketPart += mp * (i.quantity || 1); marketCount++; }
+    }
+    return s + unit * (i.quantity || 1);
+  }, 0);
   const totalSpent = owned.reduce((s, i) => s + (Number(i.price_paid) || 0) * (i.quantity || 1), 0);
 
   document.getElementById("stat-owned-count").textContent = owned.length;
   document.getElementById("stat-owned-qty").textContent = totalQty;
   document.getElementById("stat-value").textContent = totalValue.toFixed(2) + " €";
+  const valueSub = document.getElementById("stat-value-sub");
+  valueSub.textContent = marketCount ? `dont ${marketPart.toFixed(2)} € selon Cardmarket (${marketCount} carte${marketCount > 1 ? "s" : ""})` : "";
+  valueSub.classList.toggle("hidden", !marketCount);
   document.getElementById("stat-spent").textContent = totalSpent.toFixed(2) + " €";
   document.getElementById("stat-wishlist").textContent = wishlist.length;
   document.getElementById("stat-catalogue").textContent = cardsCatalogue.length;
@@ -837,6 +885,7 @@ async function renderGrid(containerId, items, isCollectionItem) {
           ${item.quantity > 1 ? `<span class="tag">x${item.quantity}</span>` : ""}
           ${item.language_override ? `<span class="tag">${escapeHtml(item.language_override)}</span>` : ""}
         </div>
+        ${marketHtml(item.card_id)}
       </div>
       <div class="actions">
         <button class="secondary" data-edit="${item.id}">Modifier</button>
@@ -863,6 +912,7 @@ function cardTileHtml(c, owned, isHidden) {
           <span class="badge ${owned ? "owned" : "missing"}">${owned ? "Possédée" : "Manquante"}</span>
           ${isHidden ? `<span class="tag">Masquée</span>` : ""}
         </div>
+        ${marketHtml(c.id)}
       </div>
       <div class="actions">
         ${owned ? "" : `<button class="primary" data-quickadd="${c.id}">+ Ajouter</button>`}
@@ -1288,6 +1338,7 @@ function aiCardRowHtml(c, { best = false, note = "" } = {}) {
           ${inWishlist(c.id) ? `<span class="tag">Wishlist</span>` : ""}
           ${note ? `<span class="tag">${escapeHtml(note)}</span>` : ""}
         </div>
+        ${marketHtml(c.id)}
       </div>
       <div class="btns">
         <button class="primary" data-ai-add="${c.id}" data-ai-status="owned">+ Ajouter</button>
