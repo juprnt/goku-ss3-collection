@@ -165,3 +165,12 @@ Tous les produits dont le **nom** Cardmarket contient « SS3 / Super Saiyan 3 So
 - Fusion World : ~137 numéros « Son Goku (FBxx-xxx) » non catalogués ;
 - Masters : ~445 produits « Son Goku, … » sans « SS3 » dans le nom.
 Il faut donc un contrôle **visuel** (image de la carte), par exemple via le serveur IA local (`ai-server/`), en partant de la vue `cardmarket_goku_review_queue`.
+
+## 12. Maintien en éveil et sauvegardes (depuis le 23/09/2026)
+
+Le plan Supabase gratuit met le projet en pause après ~7 jours sans activité et n'inclut **aucune sauvegarde automatique**. Le Mac mini s'en charge avec `backup/goku_backup.py` (Python standard, sans dépendance) :
+
+- **Chaque jour à 09:30** (LaunchAgent `com.goku.backup`, lancé au réveil si le Mac dormait) : une requête à Supabase pour que le projet reste actif.
+- **Chaque semaine** (si la dernière sauvegarde a plus de 7 jours) : export JSON de `collection_items`, `card_photos`, `hidden_cards`, `cards`, `games`, `game_sets` + téléchargement des photos du bucket `card-photos`, dans `iCloud Drive/Sauvegardes/Goku SS3/AAAA-MM-JJ/` (avec `manifest.json` et `LISEZMOI.txt` expliquant la restauration). Les **8** sauvegardes les plus récentes sont gardées. Les tables Cardmarket ne sont pas sauvegardées (régénérées chaque nuit).
+- **Clé** : clé secrète Supabase (Project Settings › API Keys › *secret*, ou ancienne *service_role*) dans `~/.config/goku-backup/secret` (droits 600). Jamais dans le dépôt : il est public et cette clé contourne RLS.
+- Installation / mise à jour : `backup/install.sh`. Sauvegarde immédiate : `python3 ~/.local/share/goku-backup/goku_backup.py --force`. Journal : `~/Library/Logs/goku-backup/backup.log`. En cas d'échec (clé absente, Supabase en pause, erreur), une notification macOS s'affiche.
