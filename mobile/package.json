@@ -1,0 +1,15 @@
+{
+  "name": "goku-ss3-mobile",
+  "private": true,
+  "version": "1.0.0",
+  "description": "App Android (Capacitor) de Goku SS3 Collection \u2014 construite par build.sh",
+  "dependencies": {
+    "@capacitor/android": "^8.5.2",
+    "@capacitor/core": "^8.5.2",
+    "@supabase/supabase-js": "2.112.3"
+  },
+  "devDependencies": {
+    "@capacitor/assets": "^3.0.5",
+    "@capacitor/cli": "^8.5.2"
+  }
+}

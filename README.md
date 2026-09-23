@@ -30,6 +30,7 @@ Card Game et jeux apparentés).
 | `README.md`          | Ce fichier — vue d'ensemble rapide.                                  |
 | `DOCUMENTATION.md`   | Documentation détaillée (schéma de données, historique complet, déploiement). |
 | `ai-server/`         | Serveur IA local (Mac mini + Ollama) : reconnaissance de cartes et recherche en langage naturel. Exclu du déploiement Vercel via `.vercelignore`. Voir [`ai-server/README.md`](./ai-server/README.md). |
+| `mobile/`            | App Android (Capacitor) : `build.sh` génère l'APK à partir de `index.html`. Exclu du déploiement Vercel. Voir [`mobile/README.md`](./mobile/README.md). |
 
 ## Tables Supabase utilisées
 

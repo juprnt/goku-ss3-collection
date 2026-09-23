@@ -7,6 +7,7 @@ donc les policies RLS s'appliquent exactement comme dans l'app.
 Endpoints :
   GET  /health    — état d'Ollama et du modèle
   POST /identify  — photo d'une carte -> infos lues + cartes du catalogue candidates
+  POST /identify/base64 — idem, photo en base64 dans un JSON (app Android)
   POST /search    — question en langage naturel -> filtres + résultats
 """
 
@@ -289,7 +290,25 @@ def score_card(card: dict, ex: dict) -> float:
 
 @app.post("/identify")
 async def identify(photo: UploadFile = File(...), user: dict = Depends(current_user)):
-    image_b64 = prepare_image(await photo.read())
+    return await identify_image(await photo.read(), user)
+
+
+class IdentifyBase64Request(BaseModel):
+    photo_base64: str
+
+
+@app.post("/identify/base64")
+async def identify_base64(req: IdentifyBase64Request, user: dict = Depends(current_user)):
+    """Variante JSON pour l'app Android (le client HTTP natif n'envoie pas de multipart)."""
+    try:
+        raw = base64.b64decode(req.photo_base64.split(",")[-1])
+    except ValueError:
+        raise HTTPException(400, "Image base64 invalide")
+    return await identify_image(raw, user)
+
+
+async def identify_image(raw: bytes, user: dict) -> dict:
+    image_b64 = prepare_image(raw)
     t0 = time.time()
     extracted = await ollama_json(IDENTIFY_SYSTEM, "Identifie cette carte.", IDENTIFY_SCHEMA, [image_b64])
     llm_seconds = round(time.time() - t0, 1)
