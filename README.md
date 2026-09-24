@@ -35,7 +35,7 @@ automatiques, le tout piloté depuis un Mac mini.
 | `ai-server/`         | Serveur IA local (Mac mini + Ollama) : reconnaissance de cartes et recherche en langage naturel ; `tools/` : revue et veille des cartes officielles Bandai. Voir [`ai-server/README.md`](./ai-server/README.md). |
 | `mobile/`            | App Android (Capacitor) : `build.sh` génère l'APK à partir de `index.html`. Voir [`mobile/README.md`](./mobile/README.md). |
 | `backup/`            | Maintien en éveil de Supabase + sauvegarde hebdomadaire dans iCloud (`goku_backup.py`, `install.sh`). |
-| `docs/`              | Tâches préparées (ex. `TASK-prix-cardmarket.md`, réalisée). |
+| `docs/`              | Charte graphique (`CHARTE.md`, « Sand, Teal, Gold & Navy », modes jour / nuit) et tâches préparées (`TASK-prix-cardmarket.md`, réalisée). |
 | `CLAUDE.md`          | Consignes pour les agents Claude Code qui travaillent sur ce dépôt. |
 
 ## Tables Supabase utilisées

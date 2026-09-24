@@ -60,8 +60,8 @@ grep -q 'networkSecurityConfig' "$MANIFEST" || perl -0pi -e 's#<application#<app
 
 # Icône : le logo (120 px) agrandi en 1024 px, sur le fond sombre de l'app.
 sips -z 1024 1024 "$REPO/logo.png" --out assets/icon.png >/dev/null
-npx capacitor-assets generate --android --iconBackgroundColor '#0f1115' --iconBackgroundColorDark '#0f1115' \
-  --splashBackgroundColor '#0f1115' --splashBackgroundColorDark '#0f1115' >/dev/null
+npx capacitor-assets generate --android --iconBackgroundColor '#083A4F' --iconBackgroundColorDark '#083A4F' \
+  --splashBackgroundColor '#083A4F' --splashBackgroundColorDark '#083A4F' >/dev/null
 
 # Version de l'app = champ "version" de mobile/package.json (ex. "0.2").
 # versionCode doit augmenter à chaque version pour qu'Android accepte la mise à jour :

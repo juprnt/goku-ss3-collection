@@ -8,30 +8,62 @@
     <link rel="shortcut icon" type="image/png" href="/logo.png?v=6" />
       <link id="link-apple-touch" rel="apple-touch-icon" sizes="120x120" href="/logo.png?v=6" />
   <style>
+    /* ---------- CHARTE GRAPHIQUE « Combo 27 — Sand, Teal, Gold & Navy » (docs/CHARTE.md) ----------
+       60/30/10. Nuit : 60 % Navy, 30 % Teal (clair en texte, teinté en aplat), 10 % Or clair du
+       logo #E4B448 (actions, texte Navy dessus). Jour : 60 % Sand + cartes blanches, 30 % Teal
+       (foncé en texte), 10 % Or foncé du logo #9C600C (actions, texte blanc). Contrastes vérifiés. */
     :root {
-      --bg: #0f1115;
-    --bg-alt: #171a21;
-    --card: #1e222b;
-    --border: #2a2f3a;
-      --text: #eef0f4;
-      --text-dim: #9aa1b1;
-    --orange: #ff7a1a;
-    --orange-dim: #b8560f;
-    --blue: #3a8dff;
-    --green: #35c46a;
-    --red: #ff5c5c;
-    --yellow: #ffd23a;
-    --radius: 12px;
-  }
+      --navy: #083a4f;
+      --teal: #407e8c;
+      --sand: #e5e1dd;
+      --gold-light: #e4b448;             /* or clair du logo */
+      --gold-dark: #9c600c;              /* or foncé du logo */
+
+      --bg: var(--navy);
+      --bg-glow: #174659;
+      --bg-alt: #062c3b;                 /* champs, lignes, tiroir */
+      --card: #114155;
+      --border: #245468;
+      --text: var(--sand);
+      --text-dim: #aab5b8;
+      --accent: #a0bec6;                 /* Teal clair : texte / icônes d'accent (6,2:1 sur Navy) */
+      --accent-dim: rgba(64, 126, 140, 0.16);
+      --brand-line: #a0bec6;
+      --cta: var(--gold-light);          /* actions principales */
+      --cta-ink: var(--navy);
+      --cta-hover: #e9c36d;
+      --success: #5fd08f;                /* « Possédée », prix */
+      --danger: #ff9b8c;                 /* « Manquante », erreurs */
+      --topbar-bg: rgba(8, 58, 79, 0.92);
+      --radius: 12px;
+    }
+    html[data-theme="light"] {
+      --bg: var(--sand);
+      --bg-glow: #f3f0ed;
+      --bg-alt: #f7f5f3;
+      --card: #ffffff;
+      --border: #d6d0c9;
+      --text: var(--navy);
+      --text-dim: #466977;
+      --accent: #2f6a7a;                 /* Teal foncé (4,7:1 sur Sand) */
+      --accent-dim: #d9e5e8;
+      --brand-line: var(--teal);
+      --cta: var(--gold-dark);
+      --cta-ink: #ffffff;
+      --cta-hover: #89540b;              /* on assombrit : éclaircir ferait passer le blanc sous 4,5:1 */
+      --success: #1b6e44;
+      --danger: #b3261e;
+      --topbar-bg: rgba(229, 225, 221, 0.92);
+    }
   * { box-sizing: border-box; }
   body {
     margin: 0;
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-    background: radial-gradient(circle at top, #1a1d25, #0b0c10 70%);
+    background: radial-gradient(circle at top, var(--bg-glow), var(--bg) 70%);
     color: var(--text);
     min-height: 100vh;
   }
-  a { color: var(--orange); }
+  a { color: var(--accent); }
   button {
     font-family: inherit;
     cursor: pointer;
@@ -43,10 +75,11 @@
     transition: transform .05s ease, opacity .15s ease;
   }
   button:active { transform: scale(0.97); }
-  button.primary { background: linear-gradient(135deg, var(--orange), #ffab4d); color: #1a1000; }
+  button.primary { background: var(--cta); color: var(--cta-ink); }
+  button.primary:hover { background: var(--cta-hover); }
   button.secondary { background: var(--card); color: var(--text); border: 1px solid var(--border); }
   button.ghost { background: transparent; color: var(--text-dim); border: 1px solid var(--border); }
-  button.danger { background: #3a1414; color: #ff8a8a; border: 1px solid #5a2020; }
+  button.danger { background: color-mix(in srgb, var(--danger) 12%, transparent); color: var(--danger); border: 1px solid color-mix(in srgb, var(--danger) 45%, transparent); }
   button:disabled { opacity: .5; cursor: not-allowed; }
   input, select, textarea {
     font-family: inherit;
@@ -58,7 +91,7 @@
     font-size: 14px;
     width: 100%;
   }
-  input:focus, select:focus, textarea:focus { outline: 1px solid var(--orange); }
+  input:focus, select:focus, textarea:focus { outline: 2px solid var(--accent); }
   input[type=checkbox] { width: auto; }
   label { font-size: 12.5px; color: var(--text-dim); display: block; margin-bottom: 4px; margin-top: 12px; }
   .hidden { display: none !important; }
@@ -83,8 +116,8 @@
   .auth-box p.sub { color: var(--text-dim); font-size: 13px; margin: 0 0 20px; }
   .auth-toggle { display: flex; gap: 8px; margin-top: 16px; }
   #auth-msg { font-size: 13px; margin-top: 12px; min-height: 18px; }
-  #auth-msg.err { color: var(--red); }
-  #auth-msg.ok { color: var(--green); }
+  #auth-msg.err { color: var(--danger); }
+  #auth-msg.ok { color: var(--success); }
 
   /* App shell */
   #app { display: none; }
@@ -92,7 +125,7 @@
     position: sticky; top: 0; z-index: 20;
     display: flex; align-items: center; justify-content: space-between;
     padding: 14px 24px;
-    background: rgba(15,17,21,0.9);
+    background: var(--topbar-bg);
     backdrop-filter: blur(8px);
     border-bottom: 1px solid var(--border);
   }
@@ -102,7 +135,7 @@
   .icon-btn { background: transparent; border: 1px solid var(--border); color: var(--text); width: 42px; height: 42px; padding: 0;
     display: inline-flex; align-items: center; justify-content: center; border-radius: 10px; font-size: 18px; position: relative; flex-shrink: 0; }
   .icon-btn svg { width: 22px; height: 22px; }
-  .menu-dot { position: absolute; top: 6px; right: 6px; width: 9px; height: 9px; border-radius: 50%; background: var(--orange); box-shadow: 0 0 8px var(--orange); }
+  .menu-dot { position: absolute; top: 6px; right: 6px; width: 9px; height: 9px; border-radius: 50%; background: var(--cta); box-shadow: 0 0 8px var(--cta); }
 
   /* Menu latéral (burger) : les « onglets » sont des entrées d'un tiroir qui glisse depuis la gauche */
   .menu-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,0.55); z-index: 40; opacity: 0; pointer-events: none; transition: opacity .2s ease; }
@@ -125,7 +158,7 @@
   nav.tabs button.tab .ico { width: 24px; text-align: center; font-size: 17px; }
   nav.tabs button.tab .tag { margin-left: auto; }
   nav.tabs button.tab:hover { background: var(--card); }
-  nav.tabs button.tab.active { background: rgba(255,122,26,0.12); color: var(--orange); }
+  nav.tabs button.tab.active { background: var(--accent-dim); color: var(--accent); }
   nav.tabs .menu-foot { margin-top: auto; padding: 14px 6px 4px; border-top: 1px solid var(--border); display: flex; flex-direction: column; gap: 10px; }
   nav.tabs .menu-foot #user-email { font-size: 12.5px; color: var(--text-dim); word-break: break-all; }
 
@@ -138,8 +171,8 @@
   .stat-card { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 18px; }
   .stat-card .label { font-size: 12px; color: var(--text-dim); text-transform: uppercase; letter-spacing: .04em; }
   .stat-card .value { font-size: 26px; font-weight: 700; margin-top: 6px; }
-  .stat-card .value.orange { color: var(--orange); }
-  .stat-card .value.green { color: var(--green); }
+  .stat-card .value.orange { color: var(--accent); }
+  .stat-card .value.green { color: var(--success); }
   .section-title { font-size: 15px; font-weight: 700; margin: 24px 0 12px; color: var(--text); }
   .breakdown-list { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 6px; }
   .breakdown-row { display: flex; justify-content: space-between; padding: 10px 14px; font-size: 13.5px; border-bottom: 1px solid var(--border); }
@@ -153,13 +186,13 @@
   .toolbar select { width: auto; min-width: 130px; }
 
   /* Quick check */
-  .quick-check { background: linear-gradient(135deg, #241408, #1a1d25); border: 1px solid var(--orange-dim); border-radius: var(--radius); padding: 18px; margin-bottom: 24px; }
-  .quick-check h3 { margin: 0 0 10px; font-size: 14px; color: var(--orange); }
+  .quick-check { background: linear-gradient(135deg, var(--accent-dim), var(--card)); border: 1px solid color-mix(in srgb, var(--brand-line) 45%, transparent); border-radius: var(--radius); padding: 18px; margin-bottom: 24px; }
+  .quick-check h3 { margin: 0 0 10px; font-size: 14px; color: var(--accent); }
   .quick-check-results { margin-top: 12px; display: flex; flex-direction: column; gap: 8px; }
   .qc-row { display: flex; justify-content: space-between; align-items: center; background: var(--bg-alt); border-radius: 8px; padding: 10px 12px; font-size: 13.5px; }
   .badge { padding: 3px 9px; border-radius: 20px; font-size: 11.5px; font-weight: 700; }
-  .badge.owned { background: rgba(53,196,106,0.15); color: var(--green); }
-  .badge.missing { background: rgba(255,92,92,0.15); color: var(--red); }
+  .badge.owned { background: color-mix(in srgb, var(--success) 14%, transparent); color: var(--success); }
+  .badge.missing { background: color-mix(in srgb, var(--danger) 14%, transparent); color: var(--danger); }
 
   /* Card grid */
   .card-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 16px; }
@@ -233,33 +266,33 @@
   .photo-slot .preview span { font-size: 11px; color: var(--text-dim); }
 
   #toast-container { position: fixed; bottom: 20px; right: 20px; z-index: 100; display: flex; flex-direction: column; gap: 8px; }
-  .toast { background: var(--card); border: 1px solid var(--border); border-left: 3px solid var(--orange); padding: 12px 16px; border-radius: 8px; font-size: 13px; box-shadow: 0 6px 20px rgba(0,0,0,0.4); }
-  .toast.err { border-left-color: var(--red); }
-  .toast.ok { border-left-color: var(--green); }
+  .toast { background: var(--card); border: 1px solid var(--border); border-left: 3px solid var(--accent); padding: 12px 16px; border-radius: 8px; font-size: 13px; box-shadow: 0 6px 20px rgba(0,0,0,0.4); }
+  .toast.err { border-left-color: var(--danger); }
+  .toast.ok { border-left-color: var(--success); }
 
   /* Prix Cardmarket (vue card_market_info) */
   .market { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; margin-top: 4px; min-width: 0; }
-  .tag.price { color: var(--green); border-color: rgba(53,196,106,0.4); background: rgba(53,196,106,0.1); font-weight: 700; }
-  .cm-link { font-size: 11px; color: var(--orange); text-decoration: none; white-space: nowrap; }
+  .tag.price { color: var(--success); border-color: color-mix(in srgb, var(--success) 40%, transparent); background: color-mix(in srgb, var(--success) 10%, transparent); font-weight: 700; }
+  .cm-link { font-size: 11px; color: var(--accent); text-decoration: none; white-space: nowrap; }
   .cm-link:hover, .vt-link:hover { text-decoration: underline; }
-  .vt-link { font-size: 11px; color: #09b1ba; text-decoration: none; white-space: nowrap; }
+  .vt-link { font-size: 11px; color: var(--accent); text-decoration: none; white-space: nowrap; }
   .stat-card .sub { font-size: 11.5px; color: var(--text-dim); margin-top: 4px; }
 
   /* Scanner & IA */
   .ai-status { font-size: 12.5px; color: var(--text-dim); margin: 0 0 14px; }
   .ai-block { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 18px; margin-bottom: 18px; }
-  .ai-block h3 { margin: 0 0 12px; font-size: 14px; color: var(--orange); }
+  .ai-block h3 { margin: 0 0 12px; font-size: 14px; color: var(--accent); }
   .ai-actions { display: flex; gap: 8px; flex-wrap: wrap; }
   .ai-actions label.btn-like { flex: 1; min-width: 140px; margin: 0; text-align: center; cursor: pointer; padding: 12px; border-radius: 10px; font-weight: 700; font-size: 14px; }
-  .ai-actions label.btn-like.primary { background: linear-gradient(135deg, var(--orange), #ffab4d); color: #1a1000; }
+  .ai-actions label.btn-like.primary { background: var(--cta); color: var(--cta-ink); }
   .ai-actions label.btn-like.secondary { background: var(--bg-alt); color: var(--text); border: 1px solid var(--border); }
   .ai-actions input[type=file] { display: none; }
   #ai-scan-preview { max-width: 140px; border-radius: 8px; margin-top: 12px; display: block; }
   .ai-msg { font-size: 13px; color: var(--text-dim); margin-top: 12px; }
-  .ai-msg.err { color: var(--red); }
+  .ai-msg.err { color: var(--danger); }
   .ai-results { display: flex; flex-direction: column; gap: 8px; margin-top: 12px; }
   .ai-row { display: flex; gap: 12px; align-items: center; background: var(--bg-alt); border-radius: 10px; padding: 8px; }
-  .ai-row.best { outline: 1px solid var(--orange); }
+  .ai-row.best { outline: 2px solid var(--cta); }
   .ai-row img, .ai-row .noimg { width: 52px; aspect-ratio: 63/88; object-fit: cover; border-radius: 6px; background: var(--card); flex-shrink: 0; }
   .ai-row .txt { flex: 1; min-width: 0; font-size: 13px; }
   .ai-row .txt .meta { font-size: 11.5px; color: var(--text-dim); }
@@ -269,16 +302,25 @@
   .ai-search { display: flex; gap: 8px; }
   .ai-search input { flex: 1; }
 
-  .spinner { width: 16px; height: 16px; border-radius: 50%; border: 2px solid rgba(255,255,255,0.2); border-top-color: var(--orange); animation: spin .7s linear infinite; display: inline-block; vertical-align: middle; }
+  .spinner { width: 16px; height: 16px; border-radius: 50%; border: 2px solid color-mix(in srgb, var(--text) 20%, transparent); border-top-color: var(--accent); animation: spin .7s linear infinite; display: inline-block; vertical-align: middle; }
   @keyframes spin { to { transform: rotate(360deg); } }
 </style>
+<script>
+  // Thème appliqué avant l'affichage (pas de flash) : choix enregistré, sinon réglage du téléphone.
+  (function () {
+    var t = null;
+    try { t = localStorage.getItem("goku-theme"); } catch (e) {}
+    if (t !== "light" && t !== "dark") t = window.matchMedia && matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark";
+    if (t === "light") document.documentElement.setAttribute("data-theme", "light");
+  })();
+</script>
 </head>
 <body>
 
 <!-- AUTH SCREEN -->
 <div id="auth-screen">
   <div class="auth-box">
-    <img class="app-logo" src="/logo.png?v=6" alt="Goku SS3 Collection" style="width:88px;height:88px;border-radius:20px;display:block;margin:0 auto 14px;box-shadow:0 8px 24px rgba(214,160,47,0.35);" />
+    <img class="app-logo" src="/logo.png?v=6" alt="Goku SS3 Collection" style="width:88px;height:88px;border-radius:20px;display:block;margin:0 auto 14px;box-shadow:0 8px 24px rgba(228,180,72,0.35);" />
     <h1 style="text-align:center;">Goku SS3 Collection</h1>
     <div id="login-form">
       <p class="sub">Connecte-toi pour accéder à ta collection.</p>
@@ -333,6 +375,7 @@
     <button class="tab" data-tab="catalogue" data-title="Catalogue"><span class="ico">📚</span>Catalogue de référence</button>
     <button class="tab" data-tab="review" data-title="Cartes à valider"><span class="ico">✅</span>Cartes à valider <span id="review-badge" class="tag hidden"></span></button>
     <div class="menu-foot">
+      <button class="ghost" id="btn-theme" type="button"></button>
       <span id="user-email"></span>
       <button class="ghost" id="btn-logout">Déconnexion</button>
     </div>
@@ -626,6 +669,20 @@ document.getElementById("btn-menu").onclick = () => setMenuOpen(true);
 document.getElementById("btn-menu-close").onclick = () => setMenuOpen(false);
 document.getElementById("menu-backdrop").onclick = () => setMenuOpen(false);
 document.addEventListener("keydown", e => { if (e.key === "Escape") setMenuOpen(false); });
+// Mode jour / nuit (choix mémorisé ; par défaut, celui du téléphone)
+function renderThemeButton() {
+  const light = document.documentElement.getAttribute("data-theme") === "light";
+  document.getElementById("btn-theme").textContent = light ? "🌙 Passer en mode nuit" : "☀️ Passer en mode jour";
+}
+document.getElementById("btn-theme").onclick = () => {
+  const light = document.documentElement.getAttribute("data-theme") !== "light";
+  if (light) document.documentElement.setAttribute("data-theme", "light");
+  else document.documentElement.removeAttribute("data-theme");
+  try { localStorage.setItem("goku-theme", light ? "light" : "dark"); } catch (e) {}
+  renderThemeButton();
+};
+renderThemeButton();
+
 document.getElementById("btn-quick-scan").onclick = () => document.querySelector('nav.tabs .tab[data-tab="ai"]').click();
 
 // Bouton « retour » d'Android (app Capacitor) : ferme le menu ou la fenêtre ouverte, sinon revient
