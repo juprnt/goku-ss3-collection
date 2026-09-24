@@ -37,6 +37,11 @@ l'app n'est pas mise à jour automatiquement.
 
 ## Différences avec le site
 
+- Le serveur IA est joint par l'**IP Tailscale** du Mac mini (`http://100.109.190.30:8787`,
+  exposé par `tailscale serve --tcp 8787`), sans DNS : sur le téléphone, « Utiliser le DNS
+  Tailscale » peut rester désactivé (il ralentissait tout Internet sur le Fold, 24/09/2026).
+  HTTP autorisé uniquement vers cette IP (`network_security_config.xml`, écrit par `build.sh`).
+
 - Détection via `IS_NATIVE_APP` dans `index.html`.
 - Les appels au serveur IA passent par `CapacitorHttp` (client HTTP natif Android) : pas de
   CORS ni de blocage « réseau privé » du navigateur. La photo est envoyée en base64 à

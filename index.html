@@ -1312,7 +1312,12 @@ function escapeHtml(str) {
 }
 
 /* ---------- Scanner & IA (serveur local sur le Mac mini, via Tailscale) ---------- */
-const AI_SERVER_URL = "https://macmini-de-juli1.tail13a987.ts.net";
+// App Android : IP Tailscale du Mac mini, sans DNS (le DNS Tailscale ralentissait tout Internet
+// sur le téléphone ; il peut rester désactivé). HTTP simple, chiffré par le tunnel Tailscale,
+// exposé par « tailscale serve --tcp 8787 ». Navigateur : nom HTTPS (page servie en HTTPS).
+const AI_SERVER_URL = (window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform())
+  ? "http://100.109.190.30:8787"
+  : "https://macmini-de-juli1.tail13a987.ts.net";
 const AI_OFFLINE_MSG = "Serveur IA injoignable : vérifie que Tailscale est activé sur ce téléphone et que le Mac mini est allumé.";
 let aiScanFile = null;
 // Dans l'app Android (Capacitor), les appels passent par le client HTTP natif :

@@ -46,6 +46,18 @@ MANIFEST=android/app/src/main/AndroidManifest.xml
 grep -q 'android.permission.CAMERA' "$MANIFEST" || \
   perl -0pi -e 's#</manifest>#    <uses-permission android:name="android.permission.CAMERA" />\n</manifest>#' "$MANIFEST"
 
+# HTTP autorisé uniquement vers l'IP Tailscale du Mac mini (serveur IA, voir AI_SERVER_URL).
+mkdir -p android/app/src/main/res/xml
+cat > android/app/src/main/res/xml/network_security_config.xml <<'XML'
+<?xml version="1.0" encoding="utf-8"?>
+<network-security-config>
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="false">100.109.190.30</domain>
+    </domain-config>
+</network-security-config>
+XML
+grep -q 'networkSecurityConfig' "$MANIFEST" || perl -0pi -e 's#<application#<application android:networkSecurityConfig="\@xml/network_security_config"#' "$MANIFEST"
+
 # Icône : le logo (120 px) agrandi en 1024 px, sur le fond sombre de l'app.
 sips -z 1024 1024 "$REPO/logo.png" --out assets/icon.png >/dev/null
 npx capacitor-assets generate --android --iconBackgroundColor '#0f1115' --iconBackgroundColorDark '#0f1115' \
@@ -62,5 +74,6 @@ perl -pi -e "s/versionCode \d+/versionCode $VERSION_CODE/; s/versionName \"[^\"]
 npx cap sync android
 (cd android && ./gradlew assembleDebug -q)
 APK="$WS/GokuSS3-$VERSION.apk"
+rm -f "$WS"/GokuSS3-*.apk   # ne garder que la dernière version
 cp android/app/build/outputs/apk/debug/app-debug.apk "$APK"
 echo "APK prêt : $APK (version $VERSION, code $VERSION_CODE)"
