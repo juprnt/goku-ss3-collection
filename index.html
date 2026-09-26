@@ -203,6 +203,16 @@
   .badge.missing { background: color-mix(in srgb, var(--danger) 14%, transparent); color: var(--danger); }
 
   /* Card grid */
+  /* En-têtes de groupe dans les grilles (jeu, série + date de sortie) */
+  .grid-head { grid-column: 1 / -1; display: flex; align-items: center; gap: 8px; min-width: 0; }
+  .grid-head--game { margin-top: 14px; padding: 9px 12px; background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); font-weight: 700; font-size: 15px; }
+  .grid-head--game img { width: 28px; height: 28px; border-radius: 6px; object-fit: contain; background: var(--navy); padding: 2px; flex-shrink: 0; }
+  .grid-head--game .count { margin-left: auto; font-size: 12px; color: var(--text-dim); font-weight: 600; white-space: nowrap; }
+  .grid-head--set { margin-top: 6px; padding: 4px 2px; font-size: 12.5px; font-weight: 700; color: var(--accent); border-bottom: 1px solid var(--border); }
+  .grid-head--set .set-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .grid-head--set .date { margin-left: auto; color: var(--text-dim); font-weight: 600; white-space: nowrap; }
+  .grid-head--set .tag { flex-shrink: 0; }
+  .card-grid > .grid-head:first-child { margin-top: 0; }
   .card-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 16px; }
   .card-tile { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; display: flex; flex-direction: column; }
   .card-tile .thumb { width: 100%; aspect-ratio: 63/88; background: var(--bg-alt); display: flex; align-items: center; justify-content: center; overflow: hidden; }
@@ -245,6 +255,7 @@
     .card-grid { grid-template-columns: repeat(3, 1fr); }
     .toolbar input[type=text] { flex: 1 1 100%; }
     .toolbar select { flex: 1; min-width: 0; }
+    .toolbar #cat-sort, .toolbar #col-sort, .toolbar #wish-sort { flex: 1 1 100%; }
     .toolbar > label { flex: 1 1 100%; margin: 0; }
     .toolbar button.primary { width: 100%; }
     .modal-overlay { padding: 12px 8px; }
@@ -442,6 +453,12 @@
         <input type="text" id="col-search" placeholder="Rechercher dans ma collection..." />
         <select id="col-filter-game"><option value="">Tous les jeux</option></select>
         <select id="col-filter-condition"><option value="">Tous états</option></select>
+        <select id="col-sort" aria-label="Trier la collection">
+          <option value="recent">Tri : ajout récent</option>
+          <option value="newest">Tri : sorties récentes d'abord</option>
+          <option value="oldest">Tri : sorties anciennes d'abord</option>
+          <option value="game">Tri : par jeu</option>
+        </select>
         <button class="primary" id="btn-add-owned">+ Ajouter une carte possédée</button>
       </div>
       <div class="card-grid" id="collection-grid"></div>
@@ -451,6 +468,12 @@
     <section class="panel" id="panel-wishlist">
       <div class="toolbar">
         <input type="text" id="wish-search" placeholder="Rechercher dans la wishlist..." />
+        <select id="wish-sort" aria-label="Trier la wishlist">
+          <option value="recent">Tri : ajout récent</option>
+          <option value="newest">Tri : sorties récentes d'abord</option>
+          <option value="oldest">Tri : sorties anciennes d'abord</option>
+          <option value="game">Tri : par jeu</option>
+        </select>
         <button class="primary" id="btn-add-wish">+ Ajouter à la wishlist</button>
       </div>
       <div class="card-grid" id="wishlist-grid"></div>
@@ -466,6 +489,11 @@
         <input type="text" id="cat-search" placeholder="Rechercher dans le catalogue..." />
         <select id="cat-filter-game"><option value="">Tous les jeux</option></select>
         <select id="cat-filter-set"><option value="">Toutes les séries</option></select>
+        <select id="cat-sort" aria-label="Trier le catalogue">
+          <option value="game">Tri : par jeu</option>
+          <option value="newest">Tri : sorties récentes d'abord</option>
+          <option value="oldest">Tri : sorties anciennes d'abord</option>
+        </select>
         <label style="display:flex; align-items:center; gap:6px; font-size:13px; color:var(--text-dim); white-space:nowrap; cursor:pointer;">
           <input type="checkbox" id="cat-show-hidden" />
           Afficher les cartes masquées
@@ -897,6 +925,70 @@ function renderDashboard() {
   }
 }
 
+const GAME_SHORT = { "carddass": "Carddass", "dbh": "DB Heroes", "dbscg-masters": "Masters", "dbscg-fusion": "Fusion World" };
+const GAME_TITLE = { "carddass": "Carddass", "dbh": "Dragon Ball Heroes", "dbscg-masters": "DBS Card Game · Masters", "dbscg-fusion": "DBS Card Game · Fusion World" };
+function gameTitle(slug) { return GAME_TITLE[slug] || gameDisplayName(slug); }
+function gameShortName(slug) {
+  if (GAME_SHORT[slug]) return GAME_SHORT[slug];
+  const g = gamesList.find(x => x.slug === slug);
+  return g ? (g.subtitle || g.name) : "Hors catalogue";
+}
+function setInfo(card) {
+  return card ? gameSetsList.find(gs => gs.game_slug === card.game_slug && gs.set_name === card.set_name) || null : null;
+}
+const MONTHS_FR = ["janv.", "févr.", "mars", "avr.", "mai", "juin", "juil.", "août", "sept.", "oct.", "nov.", "déc."];
+// Date de sortie d'une série, avec la précision connue (jour, mois, année, année estimée).
+function releaseLabel(gs) {
+  if (!gs || !gs.release_date) return "date inconnue";
+  const [y, m, d] = gs.release_date.split("-");
+  if (gs.release_precision === "annee") return y;
+  if (gs.release_precision === "annee_approx") return "vers " + y;
+  if (gs.release_precision === "mois") return MONTHS_FR[+m - 1] + " " + y;
+  return (+d) + " " + MONTHS_FR[+m - 1] + " " + y;
+}
+
+// Ordonne des éléments (cartes du catalogue ou items de collection) et intercale des en-têtes.
+// mode : "recent" (ordre reçu, sans en-tête), "game" (jeu → séries dans l'ordre de sortie),
+// "newest" / "oldest" (séries par date de sortie, tous jeux confondus ; dates inconnues à la fin).
+function orderWithHeaders(entries, getCard, mode) {
+  if (mode === "recent") return entries.map(entry => ({ entry }));
+  const gameIndex = new Map(gamesList.map((g, i) => [g.slug, i]));
+  const rows = entries.map(entry => {
+    const c = getCard(entry), gs = setInfo(c);
+    return { entry, c, gs, date: gs && gs.release_date ? gs.release_date : null,
+      gi: c && gameIndex.has(c.game_slug) ? gameIndex.get(c.game_slug) : 999,
+      so: gs && gs.sort_order != null ? gs.sort_order : 9999,
+      setKey: c ? c.game_slug + "::" + (c.set_name || "") : "__none",
+      num: c ? (c.card_number || c.card_name || "") : (entry.custom_name || "") };
+  });
+  const dir = mode === "newest" ? -1 : 1;
+  const byDate = (a, b, d) => a.date === b.date ? 0 : !a.date ? 1 : !b.date ? -1 : (a.date < b.date ? -d : d);
+  rows.sort((a, b) =>
+    (mode === "game" ? (a.gi - b.gi) || byDate(a, b, 1) : byDate(a, b, dir) || (a.gi - b.gi))
+    || (a.so - b.so) || a.setKey.localeCompare(b.setKey) || a.num.localeCompare(b.num, "fr", { numeric: true }));
+
+  const gameCounts = new Map();
+  rows.forEach(r => { const k = r.c ? r.c.game_slug : "__none"; gameCounts.set(k, (gameCounts.get(k) || 0) + 1); });
+  const out = [];
+  let lastGame = null, lastSet = null;
+  rows.forEach(r => {
+    const gameKey = r.c ? r.c.game_slug : "__none";
+    if (mode === "game" && gameKey !== lastGame) {
+      const g = gamesList.find(x => x.slug === gameKey);
+      const n = gameCounts.get(gameKey);
+      out.push({ header: `<div class="grid-head grid-head--game">${g && g.logo_url ? `<img src="${escapeHtml(g.logo_url)}" alt="" loading="lazy" />` : ""}<span>${escapeHtml(r.c ? gameTitle(gameKey) : "Hors catalogue")}</span><span class="count">${n} carte${n > 1 ? "s" : ""}</span></div>` });
+      lastGame = gameKey; lastSet = null;
+    }
+    if (r.setKey !== lastSet && (r.c || mode !== "game")) {
+      const name = r.gs && r.gs.display_name ? r.gs.display_name : (r.c ? (r.c.set_name || "Autres") : "Cartes hors catalogue");
+      out.push({ header: `<div class="grid-head grid-head--set">${mode !== "game" && r.c ? `<span class="tag">${escapeHtml(gameShortName(r.c.game_slug))}</span>` : ""}<span class="set-name">${escapeHtml(name)}</span>${r.c ? `<span class="date">${escapeHtml(releaseLabel(r.gs))}</span>` : ""}</div>` });
+      lastSet = r.setKey;
+    }
+    out.push({ entry: r.entry });
+  });
+  return out;
+}
+
 function gameDisplayName(slug) {
   const g = gamesList.find(x => x.slug === slug);
   if (!g) return slug || "Non catalogué";
@@ -947,16 +1039,16 @@ function populateCatalogueFilters() {
   const setEntries = [...setsWithCards.values()].map(s => {
     const meta = orderMap.get(s.slug + "::" + s.set_name);
     const setDisplayName = meta && meta.display_name ? meta.display_name : (s.set_name || "Autres");
-    const label = gameF ? setDisplayName : `${gameDisplayName(s.slug)} — ${setDisplayName}`;
+    const label = gameF ? setDisplayName : `${gameShortName(s.slug)} — ${setDisplayName}`;
     return {
       key: s.slug + "::" + s.set_name,
       label,
-      order: meta ? meta.sort_order : 999,
+      order: meta && meta.release_date ? meta.release_date : "9999-" + String(meta ? meta.sort_order : 999).padStart(5, "0"),
       gameOrder: gameIndex.has(s.slug) ? gameIndex.get(s.slug) : 999,
     };
   }).sort((a, b) => {
     if (a.gameOrder !== b.gameOrder) return a.gameOrder - b.gameOrder;
-    if (a.order !== b.order) return a.order - b.order;
+    if (a.order !== b.order) return a.order < b.order ? -1 : 1;
     return a.label.localeCompare(b.label);
   });
   setSel.innerHTML = '<option value="">Toutes les séries</option>' +
@@ -994,17 +1086,17 @@ async function renderCollectionGrid() {
   if (search) items = items.filter(i => displayName(i).toLowerCase().includes(search));
   if (gameF) items = items.filter(i => i.cards && i.cards.game_slug === gameF);
   if (condF) items = items.filter(i => i.condition === condF);
-  await renderGrid("collection-grid", items, true);
+  await renderGrid("collection-grid", items, true, document.getElementById("col-sort").value);
 }
 
 async function renderWishlistGrid() {
   const search = document.getElementById("wish-search").value.toLowerCase();
   let items = collectionItems.filter(i => i.status === "wishlist");
   if (search) items = items.filter(i => displayName(i).toLowerCase().includes(search));
-  await renderGrid("wishlist-grid", items, true);
+  await renderGrid("wishlist-grid", items, true, document.getElementById("wish-sort").value);
 }
 
-async function renderGrid(containerId, items, isCollectionItem) {
+async function renderGrid(containerId, items, isCollectionItem, mode = "recent") {
   const el = document.getElementById(containerId);
   if (items.length === 0) {
     el.innerHTML = '<div class="empty-state" style="grid-column:1/-1;">Rien à afficher ici pour l\'instant.</div>';
@@ -1019,14 +1111,17 @@ async function renderGrid(containerId, items, isCollectionItem) {
   ));
 
   el.innerHTML = "";
-  items.forEach((item, idx) => {
+  const urlById = new Map(items.map((item, idx) => [item.id, photoUrls[idx]]));
+  orderWithHeaders(items, i => i.cards, mode).forEach(p => {
+    if (p.header) { el.insertAdjacentHTML("beforeend", p.header); return; }
+    const item = p.entry;
     const tile = document.createElement("div");
     tile.className = "card-tile";
-    const photoUrl = photoUrls[idx];
+    const photoUrl = urlById.get(item.id);
     const thumbInner = photoUrl
       ? `<img src="${photoUrl}" alt="carte" loading="lazy" />`
       : `<div class="placeholder">Pas de photo</div>`;
-    const meta = item.cards ? `${escapeHtml(gameDisplayName(item.cards.game_slug))}${item.cards.set_name ? " · " + escapeHtml(item.cards.set_name) : ""}` : "Non cataloguée";
+    const meta = item.cards ? `${escapeHtml(gameShortName(item.cards.game_slug))}${item.cards.set_name ? " · " + escapeHtml(item.cards.set_name) : ""}` : "Non cataloguée";
     tile.innerHTML = `
       <div class="thumb">${thumbInner}</div>
       <div class="info">
@@ -1050,7 +1145,7 @@ async function renderGrid(containerId, items, isCollectionItem) {
 }
 
 function cardTileHtml(c, owned, isHidden) {
-  const metaParts = [gameDisplayName(c.game_slug)];
+  const metaParts = [gameShortName(c.game_slug)];
   if (c.set_name) metaParts.push(c.set_name);
   if (c.card_number) metaParts.push(c.card_number);
   return `
@@ -1102,22 +1197,9 @@ function renderCatalogueGrid() {
     return;
   }
 
-  // Flat list, sorted by game order -> series order -> card number/name.
-  const gameIndex = new Map(gamesList.map((g, i) => [g.slug, i]));
-  const setOrderMap = new Map(gameSetsList.map(gs => [gs.game_slug + "::" + gs.set_name, gs.sort_order]));
-  const sorted = cards.slice().sort((a, b) => {
-    const ga = gameIndex.has(a.game_slug) ? gameIndex.get(a.game_slug) : 999;
-    const gb = gameIndex.has(b.game_slug) ? gameIndex.get(b.game_slug) : 999;
-    if (ga !== gb) return ga - gb;
-    const sa = setOrderMap.has(a.game_slug + "::" + (a.set_name || "")) ? setOrderMap.get(a.game_slug + "::" + (a.set_name || "")) : 999;
-    const sb = setOrderMap.has(b.game_slug + "::" + (b.set_name || "")) ? setOrderMap.get(b.game_slug + "::" + (b.set_name || "")) : 999;
-    if (sa !== sb) return sa - sb;
-    const sn = (a.set_name || "").localeCompare(b.set_name || "");
-    if (sn !== 0) return sn;
-    return (a.card_number || a.card_name || "").localeCompare(b.card_number || b.card_name || "");
-  });
-
-  el.innerHTML = hiddenNote + sorted.map(c => cardTileHtml(c, ownedCardIds.has(c.id), hiddenCardIds.has(c.id))).join("");
+  const mode = document.getElementById("cat-sort").value;
+  const plan = orderWithHeaders(cards, c => c, mode);
+  el.innerHTML = hiddenNote + plan.map(p => p.header || cardTileHtml(p.entry, ownedCardIds.has(p.entry.id), hiddenCardIds.has(p.entry.id))).join("");
 
   el.querySelectorAll("[data-quickadd]").forEach(btn => {
     btn.onclick = () => openModal(null, btn.dataset.quickadd);
@@ -1203,6 +1285,12 @@ document.getElementById("cat-search").oninput = debounce(renderCatalogueGrid, 20
 document.getElementById("cat-show-hidden").onchange = renderCatalogueGrid;
 document.getElementById("cat-filter-game").onchange = () => { populateCatalogueFilters(); renderCatalogueGrid(); };
 document.getElementById("cat-filter-set").onchange = renderCatalogueGrid;
+// Tri (mémorisé par section)
+[["cat-sort", () => renderCatalogueGrid()], ["col-sort", () => renderCollectionGrid()], ["wish-sort", () => renderWishlistGrid()]].forEach(([id, render]) => {
+  const sel = document.getElementById(id);
+  try { const saved = localStorage.getItem("goku-" + id); if (saved && [...sel.options].some(o => o.value === saved)) sel.value = saved; } catch (e) {}
+  sel.onchange = () => { try { localStorage.setItem("goku-" + id, sel.value); } catch (e) {} render(); };
+});
 
 /* ---------- Quick check "do I own this" ---------- */
 document.getElementById("qc-input").oninput = (e) => {

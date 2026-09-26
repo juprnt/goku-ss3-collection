@@ -41,7 +41,7 @@ Les "jeux" de haut niveau. Clé primaire `slug`.
 Total : **115 cartes confirmées** + 1 en attente de validation (83 avant la passe base officielle Bandai du 23/09/2026, voir §7).
 
 ### `game_sets` (349 lignes)
-Séries / extensions à l'intérieur d'un jeu (`game_slug` + `set_name`, avec `display_name` et `sort_order` pour l'affichage). `sort_order` reflète l'ordre chronologique réel de sortie de chaque extension — c'est cette colonne qui pilote l'ordre d'affichage du catalogue (le code de tri lui-même n'a pas changé, seule la donnée a été corrigée pour Fusion World le 23/08/2026).
+Séries / extensions à l'intérieur d'un jeu (`game_slug` + `set_name`, avec `display_name` et `sort_order` pour l'affichage). **`release_date` / `release_precision`** (26/09/2026) : date de sortie de 70 séries — Fusion World : page produits officielle ; Masters : date « Available in tournaments » des cartes officielles et pages produits Bandai Asia ; Carddass Hondan : année ; Miracle Battle Carddass et Dragon Ball Heroes : année estimée (`annee_approx`). Sans date : promos Fusion World (FP), quelques réimpressions / promos Masters, DVD Number Card GT. `sort_order` reflète l'ordre chronologique réel de sortie de chaque extension — c'est cette colonne qui pilote l'ordre d'affichage du catalogue (le code de tri lui-même n'a pas changé, seule la donnée a été corrigée pour Fusion World le 23/08/2026).
 
 ### `cards` (115 lignes confirmées)
 Le catalogue de référence. Colonnes clés : `game`, `game_slug` (FK → `games.slug`), `set_name`, `set_code`, `card_number`, `card_name`, `rarity`, `card_type`, `color`, `language`, `release_date`, `official_image_url`, `source_url`, `notes`, `review_status` (`confirmed` / `pending_review` / `rejected`), `review_source`.
@@ -60,6 +60,8 @@ Table de jointure `user_id` + `card_id` : permet à un utilisateur de masquer un
 ## 5. Fonctionnalités (onglets de l'app)
 
 **Charte graphique** (depuis le 24/09/2026) : « Sand, Teal, Gold & Navy », modes **nuit** et **jour** (bouton rond ☾ / ☀ toujours visible en haut de l'écran, comme dans PAPS IA ; par défaut le réglage du téléphone). Détail, contrastes et jetons CSS : `docs/CHARTE.md`.
+
+**Tri et regroupement** (depuis le 26/09/2026) : Catalogue, Ma collection et Wishlist ont un menu **Tri** (mémorisé par section) : *par jeu* (un en-tête par jeu avec son logo et son nombre de cartes, puis les séries dans l'ordre de sortie), *sorties récentes d'abord*, *sorties anciennes d'abord* (séries de tous les jeux mêlées par date, avec le nom court du jeu), et *ajout récent* (collection / wishlist). Chaque série affiche sa date de sortie (`game_sets.release_date`, précision `release_precision` : jour, mois, année ou « vers » + année estimée) ; dates inconnues en fin de liste. Les tuiles affichent le nom court du jeu (Masters, Fusion World, Carddass, DB Heroes).
 
 **Navigation** (depuis le 23/09/2026) : menu burger ☰ en haut à gauche → tiroir latéral listant les 6 sections (avec le compteur de cartes à valider ; une pastille orange sur ☰ le signale menu fermé), l'e-mail du compte et **Déconnexion**. L'en-tête affiche le nom de la section courante, le bouton mode jour / nuit et un raccourci 📷 vers le scanner. Dans l'app Android, le bouton retour ferme le menu ou la fenêtre ouverte, sinon revient au tableau de bord, et ne quitte l'app que depuis celui-ci (plugin `@capacitor/app`).
 
