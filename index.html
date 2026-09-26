@@ -135,6 +135,14 @@
   .icon-btn { background: transparent; border: 1px solid var(--border); color: var(--text); width: 42px; height: 42px; padding: 0;
     display: inline-flex; align-items: center; justify-content: center; border-radius: 10px; font-size: 18px; position: relative; flex-shrink: 0; }
   .icon-btn svg { width: 22px; height: 22px; }
+  .theme-toggle { border-radius: 999px; color: var(--text-dim); }
+  .theme-toggle:hover { color: var(--accent); border-color: var(--accent); }
+  .theme-toggle:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .theme-toggle svg { width: 19px; height: 19px; }
+  .theme-toggle .icon-sun { display: none; }
+  html[data-theme="light"] .theme-toggle .icon-sun { display: block; }
+  html[data-theme="light"] .theme-toggle .icon-moon { display: none; }
+  .theme-toggle--floating { position: fixed; top: calc(14px + env(safe-area-inset-top)); right: 14px; z-index: 30; background: var(--card); }
   .menu-dot { position: absolute; top: 6px; right: 6px; width: 9px; height: 9px; border-radius: 50%; background: var(--cta); box-shadow: 0 0 8px var(--cta); }
 
   /* Menu latéral (burger) : les « onglets » sont des entrées d'un tiroir qui glisse depuis la gauche */
@@ -319,6 +327,7 @@
 
 <!-- AUTH SCREEN -->
 <div id="auth-screen">
+  <button class="icon-btn theme-toggle theme-toggle--floating" type="button" aria-pressed="false" title="Mode jour / nuit" aria-label="Basculer entre mode nuit et mode jour"><svg class="icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg><svg class="icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M2 12h2M20 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg></button>
   <div class="auth-box">
     <img class="app-logo" src="/logo.png?v=6" alt="Goku SS3 Collection" style="width:88px;height:88px;border-radius:20px;display:block;margin:0 auto 14px;box-shadow:0 8px 24px rgba(228,180,72,0.35);" />
     <h1 style="text-align:center;">Goku SS3 Collection</h1>
@@ -359,6 +368,7 @@
       <span class="menu-dot hidden" id="menu-dot"></span>
     </button>
     <div class="brand"><img class="app-logo" src="/logo.png?v=6" alt="" style="width:28px;height:28px;border-radius:8px;" /> <span id="page-title">Tableau de bord</span></div>
+    <button class="icon-btn theme-toggle" type="button" aria-pressed="false" title="Mode jour / nuit" aria-label="Basculer entre mode nuit et mode jour"><svg class="icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg><svg class="icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M2 12h2M20 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg></button>
     <button class="icon-btn" id="btn-quick-scan" aria-label="Scanner une carte" title="Scanner une carte">📷</button>
   </header>
 
@@ -669,18 +679,21 @@ document.getElementById("btn-menu").onclick = () => setMenuOpen(true);
 document.getElementById("btn-menu-close").onclick = () => setMenuOpen(false);
 document.getElementById("menu-backdrop").onclick = () => setMenuOpen(false);
 document.addEventListener("keydown", e => { if (e.key === "Escape") setMenuOpen(false); });
-// Mode jour / nuit (choix mémorisé ; par défaut, celui du téléphone)
+// Mode jour / nuit (choix mémorisé ; par défaut, celui du téléphone). Bouton rond dans l'en-tête et
+// sur l'écran de connexion (visible partout, comme dans PAPS IA), plus une entrée dans le menu ☰.
 function renderThemeButton() {
   const light = document.documentElement.getAttribute("data-theme") === "light";
   document.getElementById("btn-theme").textContent = light ? "🌙 Passer en mode nuit" : "☀️ Passer en mode jour";
+  document.querySelectorAll(".theme-toggle").forEach(b => b.setAttribute("aria-pressed", String(light)));
 }
-document.getElementById("btn-theme").onclick = () => {
+function toggleTheme() {
   const light = document.documentElement.getAttribute("data-theme") !== "light";
   if (light) document.documentElement.setAttribute("data-theme", "light");
   else document.documentElement.removeAttribute("data-theme");
   try { localStorage.setItem("goku-theme", light ? "light" : "dark"); } catch (e) {}
   renderThemeButton();
-};
+}
+document.querySelectorAll(".theme-toggle, #btn-theme").forEach(b => b.addEventListener("click", toggleTheme));
 renderThemeButton();
 
 document.getElementById("btn-quick-scan").onclick = () => document.querySelector('nav.tabs .tab[data-tab="ai"]').click();
