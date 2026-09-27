@@ -3,7 +3,7 @@
 Adoptée le 24/09/2026. Remplace l'ancien thème sombre unique (fond `#0F1115`, accent orange
 `#FF7A1A`). Appliquée dans `index.html` (jetons CSS en tête de `<style>`) et l'icône / l'écran de
 lancement Android (`mobile/build.sh`, `mobile/capacitor.config.json`). Deux modes : **nuit** et
-**jour**, basculés par le bouton rond ☾ / ☀ toujours visible en haut de l'écran (par défaut : réglage du téléphone).
+**jour**, planifiés : jour à 7 h, nuit à 20 h ; le bouton rond ☾ / ☀ toujours visible en haut de l'écran force l'autre mode jusqu'à la prochaine bascule.
 
 ## 1. Palette
 
@@ -98,7 +98,7 @@ Seuils : 4,5:1 texte courant (AA), 3:1 grands textes et composants.
 | `--topbar-bg` | Navy 92 % | Sand 92 % |
 
 Thème : attribut `data-theme="light"` sur `<html>`, posé avant l'affichage (script dans `<head>`)
-d'après `localStorage["goku-theme"]`, sinon `prefers-color-scheme`. Bascule : bouton rond `.theme-toggle` (lune la nuit,
+d'après l'heure (`scheduledTheme` : 7 h → 20 h = jour), sauf forçage manuel en cours (`localStorage["goku-theme-override"]`, valable jusqu'à la prochaine bascule). Bascule : bouton rond `.theme-toggle` (lune la nuit,
 soleil le jour) dans l'en-tête — collé en haut, donc visible dans toutes les sections — et en haut à
 droite de l'écran de connexion ; entrée en doublon dans le pied du menu ☰.
 

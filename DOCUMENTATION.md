@@ -59,7 +59,7 @@ Table de jointure `user_id` + `card_id` : permet à un utilisateur de masquer un
 
 ## 5. Fonctionnalités (onglets de l'app)
 
-**Charte graphique** (depuis le 24/09/2026) : « Sand, Teal, Gold & Navy », modes **nuit** et **jour** (bouton rond ☾ / ☀ toujours visible en haut de l'écran, comme dans PAPS IA ; par défaut le réglage du téléphone). Détail, contrastes et jetons CSS : `docs/CHARTE.md`.
+**Charte graphique** (depuis le 24/09/2026) : « Sand, Teal, Gold & Navy », modes **nuit** et **jour**, **planifiés** : jour à 7 h, nuit à 20 h (bascule à l'heure pile, même app ouverte). Le bouton rond ☾ / ☀ toujours visible en haut de l'écran force l'autre mode jusqu'à la prochaine bascule (`localStorage["goku-theme-override"]`). Le numéro de version de l'app est affiché en bas du menu ☰ (écrit par `mobile/build.sh`). Les filtres **Jeu** (Collection, Wishlist, Catalogue) proposent toujours les 4 jeux. Détail, contrastes et jetons CSS : `docs/CHARTE.md`.
 
 **Tri et regroupement** (depuis le 26/09/2026) : Catalogue, Ma collection et Wishlist ont un menu **Tri** (mémorisé par section) : *par jeu* (un en-tête par jeu avec son logo et son nombre de cartes, puis les séries dans l'ordre de sortie), *sorties récentes d'abord*, *sorties anciennes d'abord* (séries de tous les jeux mêlées par date, avec le nom court du jeu), et *ajout récent* (collection / wishlist). Chaque série affiche sa date de sortie (`game_sets.release_date`, précision `release_precision` : jour, mois, année ou « vers » + année estimée) ; dates inconnues en fin de liste. Les tuiles affichent le nom court du jeu (Masters, Fusion World, Carddass, DB Heroes).
 

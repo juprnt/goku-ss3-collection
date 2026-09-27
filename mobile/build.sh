@@ -71,6 +71,10 @@ IFS=. read -r V_MAJ V_MIN V_PAT <<< "$VERSION"
 VERSION_CODE=$(( ${V_MAJ:-0} * 10000 + ${V_MIN:-0} * 100 + ${V_PAT:-0} ))
 perl -pi -e "s/versionCode \d+/versionCode $VERSION_CODE/; s/versionName \"[^\"]*\"/versionName \"$VERSION\"/" android/app/build.gradle
 
+# Version affichée dans le menu ☰ de l'app
+perl -pi -e "s#<span id=\"app-version\">[^<]*</span>#<span id=\"app-version\">$VERSION</span>#" www/index.html
+grep -q "id=\"app-version\">$VERSION<" www/index.html || { echo "Version non écrite dans index.html"; exit 1; }
+
 npx cap sync android
 (cd android && ./gradlew assembleDebug -q)
 APK="$WS/GokuSS3-$VERSION.apk"

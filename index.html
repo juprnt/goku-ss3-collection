@@ -168,6 +168,7 @@
   nav.tabs button.tab:hover { background: var(--card); }
   nav.tabs button.tab.active { background: var(--accent-dim); color: var(--accent); }
   nav.tabs .menu-foot { margin-top: auto; padding: 14px 6px 4px; border-top: 1px solid var(--border); display: flex; flex-direction: column; gap: 10px; }
+  nav.tabs .menu-foot .menu-note { font-size: 11.5px; color: var(--text-dim); text-align: center; }
   nav.tabs .menu-foot #user-email { font-size: 12.5px; color: var(--text-dim); word-break: break-all; }
 
   main { padding: 24px; max-width: 1200px; margin: 0 auto; }
@@ -325,13 +326,31 @@
   @keyframes spin { to { transform: rotate(360deg); } }
 </style>
 <script>
-  // Thème appliqué avant l'affichage (pas de flash) : choix enregistré, sinon réglage du téléphone.
-  (function () {
-    var t = null;
-    try { t = localStorage.getItem("goku-theme"); } catch (e) {}
-    if (t !== "light" && t !== "dark") t = window.matchMedia && matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark";
+  // Thème planifié, appliqué avant l'affichage (pas de flash) : mode jour de 7 h à 20 h, mode nuit
+  // le reste du temps. Un appui sur le bouton ☾ / ☀ force l'autre mode jusqu'à la prochaine bascule.
+  var THEME_DAY_START = 7, THEME_NIGHT_START = 20;
+  function scheduledTheme(d) { var h = d.getHours(); return h >= THEME_DAY_START && h < THEME_NIGHT_START ? "light" : "dark"; }
+  function nextThemeSwitch(d) {
+    var n = new Date(d), h = d.getHours();
+    if (h < THEME_DAY_START) n.setHours(THEME_DAY_START, 0, 0, 0);
+    else if (h < THEME_NIGHT_START) n.setHours(THEME_NIGHT_START, 0, 0, 0);
+    else { n.setDate(n.getDate() + 1); n.setHours(THEME_DAY_START, 0, 0, 0); }
+    return n.getTime();
+  }
+  function currentTheme() {
+    var now = new Date();
+    try {
+      var o = JSON.parse(localStorage.getItem("goku-theme-override") || "null");
+      if (o && (o.theme === "light" || o.theme === "dark") && o.until > now.getTime()) return o.theme;
+    } catch (e) {}
+    return scheduledTheme(now);
+  }
+  function applyTheme(t) {
     if (t === "light") document.documentElement.setAttribute("data-theme", "light");
-  })();
+    else document.documentElement.removeAttribute("data-theme");
+  }
+  try { localStorage.removeItem("goku-theme"); } catch (e) {}  // ancien choix permanent (v0.7-0.9)
+  applyTheme(currentTheme());
 </script>
 </head>
 <body>
@@ -397,8 +416,10 @@
     <button class="tab" data-tab="review" data-title="Cartes à valider"><span class="ico">✅</span>Cartes à valider <span id="review-badge" class="tag hidden"></span></button>
     <div class="menu-foot">
       <button class="ghost" id="btn-theme" type="button"></button>
+      <span class="menu-note" id="theme-schedule"></span>
       <span id="user-email"></span>
       <button class="ghost" id="btn-logout">Déconnexion</button>
+      <span class="menu-note">Goku SS3 · version <span id="app-version">0.9</span></span>
     </div>
   </nav>
 
@@ -468,6 +489,7 @@
     <section class="panel" id="panel-wishlist">
       <div class="toolbar">
         <input type="text" id="wish-search" placeholder="Rechercher dans la wishlist..." />
+        <select id="wish-filter-game"><option value="">Tous les jeux</option></select>
         <select id="wish-sort" aria-label="Trier la wishlist">
           <option value="recent">Tri : ajout récent</option>
           <option value="newest">Tri : sorties récentes d'abord</option>
@@ -707,21 +729,30 @@ document.getElementById("btn-menu").onclick = () => setMenuOpen(true);
 document.getElementById("btn-menu-close").onclick = () => setMenuOpen(false);
 document.getElementById("menu-backdrop").onclick = () => setMenuOpen(false);
 document.addEventListener("keydown", e => { if (e.key === "Escape") setMenuOpen(false); });
-// Mode jour / nuit (choix mémorisé ; par défaut, celui du téléphone). Bouton rond dans l'en-tête et
-// sur l'écran de connexion (visible partout, comme dans PAPS IA), plus une entrée dans le menu ☰.
+// Mode jour / nuit : planifié (jour 7 h → 20 h, voir le script du <head>). Le bouton rond de l'en-tête /
+// de l'écran de connexion (et l'entrée du menu ☰) force l'autre mode jusqu'à la prochaine bascule.
 function renderThemeButton() {
   const light = document.documentElement.getAttribute("data-theme") === "light";
   document.getElementById("btn-theme").textContent = light ? "🌙 Passer en mode nuit" : "☀️ Passer en mode jour";
+  document.getElementById("theme-schedule").textContent =
+    `Automatique : jour à ${THEME_DAY_START} h, nuit à ${THEME_NIGHT_START} h` + (light === (scheduledTheme(new Date()) === "light") ? "" : " (forcé jusqu'à la prochaine bascule)");
   document.querySelectorAll(".theme-toggle").forEach(b => b.setAttribute("aria-pressed", String(light)));
 }
+function refreshTheme() { applyTheme(currentTheme()); renderThemeButton(); }
 function toggleTheme() {
-  const light = document.documentElement.getAttribute("data-theme") !== "light";
-  if (light) document.documentElement.setAttribute("data-theme", "light");
-  else document.documentElement.removeAttribute("data-theme");
-  try { localStorage.setItem("goku-theme", light ? "light" : "dark"); } catch (e) {}
+  const now = new Date();
+  const next = document.documentElement.getAttribute("data-theme") === "light" ? "dark" : "light";
+  try {
+    if (next === scheduledTheme(now)) localStorage.removeItem("goku-theme-override");
+    else localStorage.setItem("goku-theme-override", JSON.stringify({ theme: next, until: nextThemeSwitch(now) }));
+  } catch (e) {}
+  applyTheme(next);
   renderThemeButton();
 }
 document.querySelectorAll(".theme-toggle, #btn-theme").forEach(b => b.addEventListener("click", toggleTheme));
+// Bascule à l'heure pile même si l'app reste ouverte, et au retour au premier plan.
+setInterval(refreshTheme, 60 * 1000);
+document.addEventListener("visibilitychange", () => { if (!document.hidden) refreshTheme(); });
 renderThemeButton();
 
 document.getElementById("btn-quick-scan").onclick = () => document.querySelector('nav.tabs .tab[data-tab="ai"]').click();
@@ -997,10 +1028,13 @@ function gameDisplayName(slug) {
 
 /* ---------- Filters ---------- */
 function populateFilters() {
-  const gameSel = document.getElementById("col-filter-game");
-  const slugsInCatalogue = new Set(cardsCatalogue.map(c => c.game_slug));
-  const games = gamesList.filter(g => slugsInCatalogue.has(g.slug));
-  gameSel.innerHTML = '<option value="">Tous les jeux</option>' + games.map(g => `<option value="${escapeHtml(g.slug)}">${escapeHtml(gameDisplayName(g.slug))}</option>`).join("");
+  // Tous les jeux sont toujours proposés (même sans carte possédée dans ce jeu).
+  const gameOptions = '<option value="">Tous les jeux</option>' + gamesList.map(g => `<option value="${escapeHtml(g.slug)}">${escapeHtml(gameTitle(g.slug))}</option>`).join("");
+  ["col-filter-game", "wish-filter-game"].forEach(id => {
+    const sel = document.getElementById(id), prev = sel.value;
+    sel.innerHTML = gameOptions;
+    if (gamesList.some(g => g.slug === prev)) sel.value = prev;
+  });
 
   const condSel = document.getElementById("col-filter-condition");
   const conds = [...new Set(collectionItems.map(i => i.condition).filter(Boolean))];
@@ -1018,10 +1052,9 @@ function populateCatalogueFilters() {
   const prevGame = gameSel.value;
   const prevSet = setSel.value;
 
-  const slugsInCatalogue = new Set(cardsCatalogue.map(c => c.game_slug));
-  const games = gamesList.filter(g => slugsInCatalogue.has(g.slug));
+  const games = gamesList;  // les 4 jeux, toujours proposés
   gameSel.innerHTML = '<option value="">Tous les jeux</option>' +
-    games.map(g => `<option value="${escapeHtml(g.slug)}">${escapeHtml(gameDisplayName(g.slug))}</option>`).join("");
+    games.map(g => `<option value="${escapeHtml(g.slug)}">${escapeHtml(gameTitle(g.slug))}</option>`).join("");
   if (games.some(g => g.slug === prevGame)) gameSel.value = prevGame;
   const gameF = gameSel.value;
 
@@ -1091,8 +1124,10 @@ async function renderCollectionGrid() {
 
 async function renderWishlistGrid() {
   const search = document.getElementById("wish-search").value.toLowerCase();
+  const gameF = document.getElementById("wish-filter-game").value;
   let items = collectionItems.filter(i => i.status === "wishlist");
   if (search) items = items.filter(i => displayName(i).toLowerCase().includes(search));
+  if (gameF) items = items.filter(i => i.cards && i.cards.game_slug === gameF);
   await renderGrid("wishlist-grid", items, true, document.getElementById("wish-sort").value);
 }
 
@@ -1279,6 +1314,7 @@ function debounce(fn, delayMs) {
 document.getElementById("col-search").oninput = debounce(renderCollectionGrid, 200);
 document.getElementById("review-search").oninput = debounce(renderReviewGrid, 200);
 document.getElementById("col-filter-game").onchange = renderCollectionGrid;
+document.getElementById("wish-filter-game").onchange = renderWishlistGrid;
 document.getElementById("col-filter-condition").onchange = renderCollectionGrid;
 document.getElementById("wish-search").oninput = debounce(renderWishlistGrid, 200);
 document.getElementById("cat-search").oninput = debounce(renderCatalogueGrid, 200);
