@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>com.goku.pocketbase</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/opt/homebrew/bin/pocketbase</string>
+    <string>serve</string>
+    <string>--http=127.0.0.1:8092</string>
+    <string>--dir=__HOME__/Services/goku/pb_data</string>
+    <string>--publicDir=__HOME__/Services/goku/pb_public</string>
+    <string>--migrationsDir=__HOME__/Services/goku/pb_migrations</string>
+    <string>--hooksDir=__HOME__/Services/goku/pb_hooks</string>
+  </array>
+  <key>WorkingDirectory</key><string>__HOME__/Services/goku</string>
+  <key>RunAtLoad</key><true/>
+  <key>KeepAlive</key><true/>
+  <key>StandardOutPath</key><string>__HOME__/Services/goku/pocketbase.log</string>
+  <key>StandardErrorPath</key><string>__HOME__/Services/goku/pocketbase.log</string>
+</dict>
+</plist>

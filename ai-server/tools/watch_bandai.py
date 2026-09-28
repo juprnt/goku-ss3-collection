@@ -18,7 +18,7 @@ Les séries inconnues sont ajoutées à game_sets. Notification macOS s'il y a d
 Usage (depuis ai-server/) :
   UV_PROJECT_ENVIRONMENT=~/.local/share/goku-ai-server/venv uv run python tools/watch_bandai.py [--seed] [--dry-run]
   --seed    : marque tout l'existant comme vu, sans rien ajouter (première installation)
-  --dry-run : affiche ce qui serait ajouté, sans écrire dans Supabase ni dans seen.json
+  --dry-run : affiche ce qui serait ajouté, sans écrire dans la base ni dans seen.json
 """
 
 import asyncio
@@ -35,9 +35,9 @@ import httpx
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 import find_fw_ss3 as fw  # noqa: E402  (liste, fiches et images Fusion World)
-import server  # noqa: E402  (ollama_json, prepare_image, SUPABASE_URL)
+import server  # noqa: E402  (ollama_json, prepare_image)
 
-KEY_FILE = Path.home() / ".config/goku-backup/secret"  # même clé secrète que la sauvegarde
+PB_CONFIG = Path.home() / ".config/goku-pb/superuser.json"  # compte superuser PocketBase (hors dépôt)
 SEEN_FILE = Path.home() / ".local/share/goku-watch/seen.json"
 MASTERS_SEARCH = "https://www.dbs-cardgame.com/us-en/cardlist/index.php?search=true"
 MASTERS_IMG = "https://www.dbs-cardgame.com/images/cardlist/cardimg/"
@@ -79,30 +79,47 @@ def base_key(number: str) -> str:
     return f"{m.group(1)}-{m.group(2)}" if m else (number or "")
 
 
-# ------------------------------------------------------------------ Supabase (clé secrète)
+# ------------------------------------------------------------------ base de données (PocketBase)
 
-class Supabase:
-    def __init__(self, http: httpx.AsyncClient, key: str):
+class Base:
+    """PocketBase du Mac mini, avec le compte superuser (~/.config/goku-pb/superuser.json)."""
+
+    def __init__(self, http: httpx.AsyncClient):
         self.http = http
-        # User-Agent propre : Supabase refuse les clés secrètes (sb_secret_…) sur une requête qui
-        # ressemble à un navigateur, or le client HTTP partagé se présente en « Mozilla » pour Bandai.
-        self.h = {"apikey": key, "Content-Type": "application/json", "User-Agent": "goku-ss3-bandai-watch"}
-        if key.startswith("eyJ"):  # ancienne clé service_role (JWT)
-            self.h["Authorization"] = f"Bearer {key}"
+        cfg = json.loads(PB_CONFIG.read_text())
+        self.url = cfg.get("url", "http://127.0.0.1:8092").rstrip("/")
+        self.cfg = cfg
+        self.h = {}
 
-    async def select(self, table: str, params: dict) -> list:
-        r = await self.http.get(f"{server.SUPABASE_URL}/rest/v1/{table}", params=params, headers=self.h)
+    async def login(self):
+        r = await self.http.post(f"{self.url}/api/collections/_superusers/auth-with-password",
+                                 json={"identity": self.cfg["email"], "password": self.cfg["password"]})
         r.raise_for_status()
-        return r.json()
+        self.h = {"Authorization": r.json()["token"]}
 
-    async def insert(self, table: str, rows: list, on_conflict: str) -> list:
-        if not rows:
-            return []
-        r = await self.http.post(f"{server.SUPABASE_URL}/rest/v1/{table}", params={"on_conflict": on_conflict},
-                                 headers={**self.h, "Prefer": "return=representation,resolution=ignore-duplicates"},
-                                 json=rows)
-        r.raise_for_status()
-        return r.json()
+    async def select(self, collection: str, fields: str) -> list:
+        out, page = [], 1
+        while True:
+            r = await self.http.get(f"{self.url}/api/collections/{collection}/records", headers=self.h,
+                                    params={"fields": fields, "perPage": 500, "page": page, "skipTotal": 1})
+            r.raise_for_status()
+            items = r.json()["items"]
+            out += items
+            if len(items) < 500:
+                return out
+            page += 1
+
+    async def insert(self, collection: str, rows: list) -> int:
+        """Ajoute les lignes ; celles qui existent déjà (index unique) sont ignorées."""
+        n = 0
+        for row in rows:
+            r = await self.http.post(f"{self.url}/api/collections/{collection}/records", headers=self.h,
+                                     json={k: v for k, v in row.items() if v is not None})
+            if r.status_code == 400 and "unique" in r.text.lower():
+                continue
+            r.raise_for_status()
+            n += 1
+        return n
 
 
 # ------------------------------------------------------------------ Masters
@@ -160,7 +177,7 @@ def masters_set_name(series: str) -> str:
 
 # ------------------------------------------------------------------ séries (game_sets)
 
-async def ensure_set(sb: Supabase, sets: list, game_slug: str, code: str, name: str, dry: bool) -> str:
+async def ensure_set(sb: Base, sets: list, game_slug: str, code: str, name: str, dry: bool) -> str:
     """Renvoie le set_name à utiliser ; crée la série si son code n'est pas encore connu."""
     for s in sets:
         if s["game_slug"] == game_slug and s["display_name"].endswith(f"({code})"):
@@ -169,7 +186,7 @@ async def ensure_set(sb: Supabase, sets: list, game_slug: str, code: str, name: 
     row = {"game_slug": game_slug, "set_name": name, "display_name": f"{name} ({code})", "sort_order": order}
     log(f"Nouvelle série {game_slug} : {row['display_name']}")
     if not dry:
-        await sb.insert("game_sets", [row], "game_slug,set_name")
+        await sb.insert("game_sets", [row])
     sets.append(row)
     return name
 
@@ -177,17 +194,18 @@ async def ensure_set(sb: Supabase, sets: list, game_slug: str, code: str, name: 
 # ------------------------------------------------------------------ principal
 
 async def main(seed: bool, dry: bool):
-    if not KEY_FILE.exists() or not KEY_FILE.read_text().strip():
-        log(f"Clé absente : {KEY_FILE}")
-        notify("Clé Supabase absente : veille non effectuée.")
+    if not PB_CONFIG.exists():
+        log(f"Identifiants absents : {PB_CONFIG}")
+        notify("Identifiants de la base absents : veille non effectuée.")
         sys.exit(1)
     seen = json.loads(SEEN_FILE.read_text()) if SEEN_FILE.exists() else {"masters": [], "fw": []}
     seen_masters, seen_fw = set(seen["masters"]), set(seen["fw"])
 
     async with httpx.AsyncClient(timeout=60, headers={"User-Agent": "Mozilla/5.0 goku-ss3-collection"}) as http:
-        sb = Supabase(http, KEY_FILE.read_text().strip())
-        catalogue = await sb.select("cards", {"select": "game_slug,card_number,official_image_url"})
-        sets = await sb.select("game_sets", {"select": "game_slug,set_name,display_name,sort_order"})
+        sb = Base(http)
+        await sb.login()
+        catalogue = await sb.select("cards", "game_slug,card_number,official_image_url")
+        sets = await sb.select("game_sets", "game_slug,set_name,display_name,sort_order")
         known_masters = {base_key(c["card_number"]) for c in catalogue if c["game_slug"] == "dbscg-masters"}
         known_imgs = {(c["official_image_url"] or "").rsplit("/", 1)[-1] for c in catalogue}
 
@@ -270,7 +288,7 @@ async def main(seed: bool, dry: bool):
             log(f"{'AJOUT' if r['review_status'] == 'confirmed' else 'À VALIDER'} {r['card_number']} — {r['card_name']}")
         if not dry:
             if new_rows:
-                await sb.insert("cards", new_rows, "game,set_code,card_number,language")
+                await sb.insert("cards", new_rows)
             SEEN_FILE.parent.mkdir(parents=True, exist_ok=True)
             SEEN_FILE.write_text(json.dumps({"masters": sorted(seen_masters | {c["number"] for c in masters}),
                                              "fw": sorted(seen_fw | set(fw_uniq))}, indent=1))

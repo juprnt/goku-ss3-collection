@@ -1,6 +1,6 @@
 # Goku SS3 Card Collection — Documentation
 
-_Dernière mise à jour : 23 septembre 2026_
+_Dernière mise à jour : 28 septembre 2026 (base de données passée de Supabase au Mac mini, v1.1)_
 
 ## 1. Résumé
 
@@ -10,23 +10,26 @@ Application web à page unique pour cataloguer et suivre une collection personne
 - **Ancien site :** https://goku-ss3-collection.vercel.app/ — **abandonné** le 23/09/2026 (projet Vercel en pause, répond 503).
 - **Repo GitHub :** `juprnt/goku-ss3-collection`
 - **Projet Vercel :** `goku-ss3-collection` (équipe `juprnts-projects`) — **en pause / abandonné**
-- **Projet Supabase :** `goku-ss3-collection` (ref `vtdohksscretlbvhsgfo`, région `eu-west-3`)
+- **Base de données :** **PocketBase sur le Mac mini** depuis le 28/09/2026 (voir §14), accessible uniquement via Tailscale (`http://100.109.190.30:8092`).
+- **Ancien projet Supabase :** `goku-ss3-collection` (ref `vtdohksscretlbvhsgfo`) — gardé **en pause 1 mois** après la bascule, par sécurité, puis à supprimer.
 - **Statut :** en phase de test utilisateur (quelques semaines à partir du 23/08/2026) — voir §10.
 
 ## 2. Stack technique
 
 - **Frontend :** trois fichiers statiques à la racine du dépôt — `index.html` (HTML + CSS + JS vanilla, aucune étape de build), `logo.png` (logo de l'app) et les fichiers Markdown de doc. Le JS est écrit en `<script>` classique (pas de modules ES, pas de bundler).
-- **Client Supabase :** chargé via CDN, version épinglée (`https://unpkg.com/@supabase/supabase-js@2.112.3`) plutôt que flottante, pour éviter qu'une mise à jour du CDN casse le site sans prévenir. Initialisé avec l'URL du projet et la clé `anon` publique (sans danger à exposer côté client : toutes les tables ont Row Level Security activé).
-- **Backend :** Supabase (Postgres + Auth + Storage).
-- **Hébergement :** Vercel, **projet lié au dépôt GitHub** (voir §6).
+- **Accès aux données :** petit client maison dans `index.html` (`pbRequest`, `db.list/create/update/remove/createForm`) qui parle à l'API REST de PocketBase. Dans l'APK, les appels passent par `CapacitorHttp` (natif, pas de souci CORS / HTTP) ; dans un navigateur, par `fetch`. Aucun SDK.
+- **Backend :** PocketBase 0.40 (SQLite + fichiers) sur le Mac mini, service launchd `com.goku.pocketbase`, dossier `~/Services/goku` (hors iCloud). Même principe que le projet Mariage & Baptême.
+- **Hébergement de l'app :** APK Android (`mobile/`). L'ancien site Vercel est abandonné.
 
 Aucune dépendance npm, aucun système de build : modifier `index.html` (ou `logo.png`) = modifier toute l'application.
 
 ## 3. Authentification
 
-Email + mot de passe via `supabase.auth` (`signUp` / `signInWithPassword`). **Mot de passe oublié ?** par **code** (depuis le 23/09/2026, pour ne plus dépendre d'un site web) : `resetPasswordForEmail(email)` envoie un e-mail contenant un code ; l'utilisateur le saisit dans l'app avec son nouveau mot de passe → `verifyOtp({ email, token, type: 'recovery' })` puis `updateUser({ password })`. **Prérequis Supabase** : le modèle d'e-mail *Reset Password* (Authentication › Emails) doit contenir `{{ .Token }}` (le modèle par défaut n'a qu'un lien, qui pointait vers l'ancien site Vercel). Chaque compte est isolé : les données de collection (`collection_items`, `card_photos`, `hidden_cards`) sont scoping par `user_id` et protégées par RLS. Le catalogue de référence (`cards`, `games`, `game_sets`) est partagé entre tous les utilisateurs (lecture commune).
+Email + mot de passe (collection `users` de PocketBase, `auth-with-password`). Le jeton est gardé dans `localStorage["goku-pb-auth"]` et rafraîchi au démarrage (`auth-refresh`). **Pas d'inscription publique** : le compte est créé par le superuser (il a été repris de Supabase avec le même identifiant, donc toutes les données restent liées). **Mot de passe oublié** : sur le Mac mini, `python3 ~/Services/goku/tools/set_password.py` (demande l'e-mail et le nouveau mot de passe, sans l'afficher). Données de collection (`collection_items`, `card_photos`, `hidden_cards`) : chacun ne voit que les siennes (règles `user_id = @request.auth.id`). Catalogue (`cards`, `games`, `game_sets`) : partagé entre comptes connectés.
 
-## 4. Modèle de données (Supabase / Postgres, schéma `public`)
+## 4. Modèle de données (PocketBase ; schéma : `backend/pb_migrations/1790700000_schema.js`)
+
+Les identifiants Supabase (UUID) ont été conservés ; l'id d'un jeu est son `slug`. Les images du catalogue autrefois sur Supabase Storage sont dans le champ fichier `cards.image` (sinon `official_image_url`, lien Bandai) ; les photos personnelles dans `card_photos.photo` (fichier **protégé**, lu avec un jeton de fichier temporaire).
 
 ### `games` (4 lignes)
 Les "jeux" de haut niveau. Clé primaire `slug`.
@@ -118,15 +121,15 @@ Le logo ("EDITION" + silhouette de Goku SS3, fond doré) est un fichier externe 
 - `<head>` : meta, titre, favicon/apple-touch-icon/shortcut icon (`/logo.png?v=6`).
 - `<style>` : variables CSS (`:root`), écran d'authentification, en-tête et menu latéral (burger), grilles de cartes (3 colonnes ≤ 480 px, 5 colonnes 481–1100 px), prix/liens Cardmarket et Vinted, section Scanner & IA, modale d'ajout/édition, toasts.
 - `<body>` : écran d'authentification (connexion + réinitialisation par code), coquille de l'app (en-tête ☰ / titre / 📷, tiroir de menu, 6 panneaux), modale d'ajout/édition, conteneur de toasts.
-- `<script>` : initialisation Supabase, auth et mot de passe oublié par code (`verifyOtp`), menu (`setMenuOpen`, bouton retour Android), chargement des données (`loadAll`, dont `loadMarketInfo`), cache des URLs de photos (`getPhotoUrl`), rendu des grilles (`renderGrid`, `renderCatalogueGrid`, `renderReviewGrid`, `cardTileHtml`), prix et liens (`marketHtml`, `marketPrice`, `vintedUrl`), Scanner & IA (`aiFetch`, `nativeAiRequest`, `shrinkPhoto`, `runScan`, `runAiSearch`), filtres, modale, upload de photos, utilitaires (`debounce`, `escapeHtml`, `gameDisplayName`).
+- `<script>` : client PocketBase (`pbRequest`, `db`), auth (`doAuth`, `checkSession`), menu (`setMenuOpen`, bouton retour Android), chargement des données (`loadAll`, dont `loadMarketInfo`), cache des URLs de photos (`getPhotoUrl`), rendu des grilles (`renderGrid`, `renderCatalogueGrid`, `renderReviewGrid`, `cardTileHtml`), prix et liens (`marketHtml`, `marketPrice`, `vintedUrl`), Scanner & IA (`aiFetch`, `nativeAiRequest`, `shrinkPhoto`, `runScan`, `runAiSearch`), filtres, modale, upload de photos, utilitaires (`debounce`, `escapeHtml`, `gameDisplayName`).
 
 ## 9. Pistes pour la suite
 
 - Continuer à enrichir le catalogue de référence (115 cartes au 23/09/2026) au fil des photos envoyées par l'utilisateur.
 - Pas de pagination sur les grilles — à surveiller si le catalogue grossit beaucoup au-delà de quelques centaines de cartes.
-- Pas d'écoute `onAuthStateChange` — un token expiré en cours de session n'est pas géré automatiquement (l'utilisateur doit recharger la page).
+- Un jeton expiré en cours de session n'est pas rafraîchi automatiquement (il l'est à chaque démarrage de l'app).
 - 9 images Carddass/DBH orphelines identifiées mais non intégrées au catalogue (à confirmer avec l'utilisateur avant ajout).
-- **À faire (utilisateur)** : ajouter `{{ .Token }}` au modèle d'e-mail *Reset Password* de Supabase (sinon le « Mot de passe oublié » par code ne reçoit pas de code) ; éventuellement régénérer la clé secrète Supabase (elle a transité dans une conversation) et mettre à jour `~/.config/goku-backup/secret`.
+- **À faire (utilisateur)** : définir le mot de passe du compte sur le Mac mini (`python3 ~/Services/goku/tools/set_password.py`), vérifier l'app, puis supprimer le projet Supabase fin octobre 2026 (et la clé `~/.config/goku-backup/secret`).
 - **À trancher** : FB05-119 (au catalogue comme SS3, mais les 5 versions officielles montrent un Goku SS1) ; FB09-081 en « Cartes à valider » ; lien Cardmarket de BT20-095-V3 (prix ~5 800 €, correspondance `probable`).
 - Lier à Cardmarket les 32 cartes Fusion World ajoutées le 23/09/2026 (parallèles, promos FP…) pour qu'elles aient un prix.
 
@@ -148,25 +151,15 @@ Source : fichiers **officiels et publics** de Cardmarket (pas de scraping), jeu 
 
 Carddass et Dragon Ball Heroes ne sont pas vendus sur Cardmarket : pas de prix pour ces jeux.
 
-### Fonctionnement
-- Fonction SQL `private.sync_cardmarket(13)` (schéma privé, non exposé par l'API, `security definer`) : télécharge les deux fichiers via l'extension `http`, met à jour les tables, écrit un journal.
-- Planifiée par **pg_cron** : job `cardmarket-daily-sync`, tous les jours à 05:15 UTC (07:15 à Paris l'été).
-- Lancer à la main : `select private.sync_cardmarket(13);` dans le SQL Editor Supabase.
-- Vérifier : `select * from cardmarket_sync_log order by run_at desc limit 5;`
-
-### Tables / vues (lecture seule pour les utilisateurs connectés, RLS)
-| Objet | Contenu |
-|---|---|
-| `cardmarket_products` | ~13 200 produits DBS (idProduct, nom anglais, idExpansion, idMetacard, date d'ajout, `first_seen_at`). |
-| `cardmarket_prices` | Dernier prix par produit : `trend`, `avg`, `low`, `avg1/7/30` + variantes `_foil`. |
-| `cardmarket_price_history` | Un point par jour, **uniquement pour les produits liés à une carte du catalogue**. |
-| `cardmarket_sync_log` | Journal de chaque exécution (ok / erreur, volumes, date du guide). |
-| `cards_with_prices` (vue) | Carte du catalogue + nom Cardmarket + prix du jour. |
-| `card_market_info` (vue) | **Vue à utiliser par le front** : 1 ligne par carte confirmée avec `price_eur`, `price_basis`, `cardmarket_url` (page produit ou recherche), `cardmarket_match`. Voir `docs/TASK-prix-cardmarket.md`. |
-| `cardmarket_goku_review_queue` (vue) | Produits « Goku » Cardmarket non liés au catalogue — file de travail pour trouver les SS3 manquantes. |
+### Fonctionnement (depuis le 28/09/2026 : Mac mini)
+- Script `tools/cardmarket_sync.py` (Python standard), lancé **chaque jour à 05:15** par le LaunchAgent `com.goku.cardmarket` (installé par `deploy.sh`, journal `~/Services/goku/cardmarket.log`).
+- Il télécharge les deux fichiers, garde le catalogue complet et les derniers prix dans une base locale `~/Services/goku/cardmarket.db`, puis écrit dans PocketBase : `card_market_info` (1 ligne par carte confirmée, champ JSON `info` avec `price_eur`, `price_basis`, `cardmarket_url`, `cardmarket_match`…, même calcul que l'ancienne vue Supabase — vérifié : 0 écart sur 130 cartes), `cardmarket_price_history` (un point par jour pour les produits liés) et `cardmarket_sync_log`.
+- Lancer à la main : `python3 ~/Services/goku/tools/cardmarket_sync.py`.
+- Avant le 28/09/2026 : fonction SQL `private.sync_cardmarket(13)` + pg_cron sur Supabase.
+- La file de travail « produits Goku non liés » (ancienne vue `cardmarket_goku_review_queue`) se retrouve dans `cardmarket.db` (table `products`).
 
 ### Affichage dans l'app (depuis le 23/09/2026)
-- `loadMarketInfo()` lit la vue `card_market_info` en parallèle du reste dans `loadAll()` → `marketInfo` (Map `card_id` → ligne). En cas d'erreur : simple `console.warn`, l'app se charge normalement sans prix.
+- `loadMarketInfo()` lit la collection `card_market_info` en parallèle du reste dans `loadAll()` → `marketInfo` (Map `card_id` → ligne). En cas d'erreur : simple `console.warn`, l'app se charge normalement sans prix.
 - `marketHtml(cardId)` : badge prix vert + lien `Cardmarket ↗` (`target="_blank"`), utilisé dans les tuiles du Catalogue, de Ma collection / Wishlist et des résultats du Scanner. Rien n'est affiché pour les cartes sans prix ni lien (Carddass, DBH, cartes non liées).
 - Tableau de bord : `estimated_value` de l'item, sinon `price_eur` de Cardmarket (`marketPrice(card_id)`).
 - App Android : un lien `target="_blank"` ouvre bien le navigateur du téléphone (vérifié dans l'émulateur), rien de spécifique à Capacitor.
@@ -184,14 +177,15 @@ Tous les produits dont le **nom** Cardmarket contient « SS3 / Super Saiyan 3 So
 - Masters : ~445 produits « Son Goku, … » sans « SS3 » dans le nom.
 Il faut donc un contrôle **visuel** (image de la carte), par exemple via le serveur IA local (`ai-server/`), en partant de la vue `cardmarket_goku_review_queue`.
 
-## 12. Maintien en éveil et sauvegardes (depuis le 23/09/2026)
+## 12. Sauvegardes (depuis le 23/09/2026 ; PocketBase depuis le 28/09/2026)
 
-Le plan Supabase gratuit met le projet en pause après ~7 jours sans activité et n'inclut **aucune sauvegarde automatique**. Le Mac mini s'en charge avec `backup/goku_backup.py` (Python standard, sans dépendance) :
-
-- **Chaque jour à 09:30** (LaunchAgent `com.goku.backup`, lancé au réveil si le Mac dormait) : une requête à Supabase pour que le projet reste actif.
-- **Chaque semaine** (si la dernière sauvegarde a plus de 7 jours) : export JSON de `collection_items`, `card_photos`, `hidden_cards`, `cards`, `games`, `game_sets` + téléchargement des photos du bucket `card-photos`, dans `iCloud Drive/Sauvegardes/Goku SS3/AAAA-MM-JJ/` (avec `manifest.json` et `LISEZMOI.txt` expliquant la restauration). Les **8** sauvegardes les plus récentes sont gardées. Les tables Cardmarket ne sont pas sauvegardées (régénérées chaque nuit).
-- **Clé** : clé secrète Supabase (Project Settings › API Keys › *secret*, ou ancienne *service_role*) dans `~/.config/goku-backup/secret` (droits 600). Jamais dans le dépôt : il est public et cette clé contourne RLS.
-- Installation / mise à jour : `backup/install.sh`. Sauvegarde immédiate : `python3 ~/.local/share/goku-backup/goku_backup.py --force`. Journal : `~/Library/Logs/goku-backup/backup.log`. En cas d'échec (clé absente, Supabase en pause, erreur), une notification macOS s'affiche.
+`backup/goku_backup.py` (Python standard) tourne sur le Mac mini **chaque jour à 09:30** (LaunchAgent `com.goku.backup`) et, si la dernière sauvegarde a plus de 7 jours :
+- demande à PocketBase une **sauvegarde complète** (zip : base + images du catalogue + photos), la télécharge puis la supprime côté serveur ;
+- exporte aussi en JSON lisible `collection_items`, `card_photos`, `hidden_cards`, `cards`, `games`, `game_sets` ;
+- range le tout dans `iCloud Drive/Sauvegardes/Goku SS3/AAAA-MM-JJ/` (avec `manifest.json` et `LISEZMOI.txt` : restauration via l'admin PocketBase › Settings › Backups). Les **8** plus récentes sont gardées.
+- Identifiants : superuser PocketBase dans `~/.config/goku-pb/superuser.json` (droits 600, jamais dans le dépôt).
+- Installation : `backup/install.sh`. Sauvegarde immédiate : `python3 ~/.local/share/goku-backup/goku_backup.py --force`. Journal : `~/Library/Logs/goku-backup/backup.log`. Notification macOS en cas d'échec.
+- Le « maintien en éveil » de Supabase n'existe plus (inutile).
 
 ## 13. Veille des nouvelles cartes Bandai et recherche Vinted (depuis le 23/09/2026)
 
@@ -205,4 +199,15 @@ LaunchAgent `com.goku.bandai-watch`, tous les jours à **08:00** sur le Mac mini
 
 ### Recherche Vinted (`vintedUrl()` dans `index.html`)
 Lien `https://www.vinted.fr/catalog?search_text=…` sur les cartes manquantes (catalogue, résultats du scanner) et la wishlist. Requête : numéro sans suffixe de rareté + « goku ss3 » (Masters) ou + « goku » (Fusion World) ; « carddass goku super saiyan 3 » ; « dragon ball heroes goku ss3 <n°> » ; nom personnalisé pour les items hors catalogue. Choix testés sur vinted.fr : le numéro seul et le filtre de catégorie « Cartes à collectionner » dégradent les résultats. Tri par pertinence.
+
+## 14. Base de données sur le Mac mini (bascule du 28/09/2026)
+
+- **PocketBase 0.40** (Homebrew), service launchd `com.goku.pocketbase` : `pocketbase serve --http=127.0.0.1:8092`, données dans `~/Services/goku/pb_data`. Accès distant **uniquement via Tailscale** : `tailscale serve --bg --tcp=8092 tcp://127.0.0.1:8092` → `http://100.109.190.30:8092` (tailnet seulement, pas de Funnel). Admin : `http://127.0.0.1:8092/_/`.
+- **Déploiement** : `./deploy.sh` copie `backend/pb_migrations`, `backend/pb_hooks` et `tools/` vers `~/Services/goku` puis relance le service (les données ne sont jamais touchées) ; `--install` réinstalle les LaunchAgents (base + synchro Cardmarket).
+- **Outils** (`tools/`) : `pb.py` (client Python superuser), `import_supabase.py` (copie Supabase → PocketBase, relançable), `cardmarket_sync.py`, `set_password.py`.
+- **Import du 27/09/2026** : 4 jeux, 350 séries, 130 cartes (59 images rapatriées), 38 cartes de collection, 25 cartes masquées, 130 infos Cardmarket, 257 points d'historique ; tous les fichiers Supabase Storage archivés dans `~/Services/goku/supabase-archive/`. Le mot de passe n'a pas été repris : le définir avec `set_password.py`.
+- **Serveur IA** (`ai-server/`) : vérifie le jeton PocketBase de l'utilisateur (`auth-refresh`) et lit catalogue / collection avec ce jeton (`PB_URL` dans `.env`). Il écoute désormais sur `127.0.0.1:8787` (Tailscale expose le port ; écouter sur 0.0.0.0 entrait en conflit avec `tailscale serve`).
+- **Veille Bandai** : écrit dans PocketBase avec le compte superuser.
+- **App** : `PB_URL` = `http://100.109.190.30:8092` dans l'APK ; dans un navigateur, l'origine si la page est servie sur le port 8092, sinon `http://127.0.0.1:8092`. `mobile/capacitor.config.json` autorise le contenu mixte (images HTTP du Mac mini dans la WebView HTTPS).
+- **Supabase** : projet mis en pause, gardé 1 mois, puis à supprimer.
 

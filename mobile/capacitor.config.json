@@ -2,6 +2,11 @@
   "appId": "com.juprnt.gokuss3",
   "appName": "Goku SS3",
   "webDir": "www",
-  "server": { "androidScheme": "https" },
-  "backgroundColor": "#083A4F"
+  "server": {
+    "androidScheme": "https"
+  },
+  "backgroundColor": "#083A4F",
+  "android": {
+    "allowMixedContent": true
+  }
 }

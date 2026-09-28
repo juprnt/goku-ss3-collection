@@ -1,5 +1,5 @@
 #!/bin/zsh
-# Installe (ou met à jour) le maintien en éveil + la sauvegarde hebdomadaire de Supabase.
+# Installe (ou met à jour) la sauvegarde hebdomadaire de la base PocketBase (Mac mini) vers iCloud.
 # Le script est copié hors d'iCloud et lancé chaque jour à 09:30 par launchd (si le Mac dort
 # à cette heure-là, il est lancé au réveil). À relancer après chaque modification.
 set -e
@@ -8,12 +8,10 @@ APP="$HOME/.local/share/goku-backup"
 LABEL="com.goku.backup"
 PLIST="$HOME/Library/LaunchAgents/$LABEL.plist"
 LOGS="$HOME/Library/Logs/goku-backup"
-KEY="$HOME/.config/goku-backup/secret"
+KEY="$HOME/.config/goku-pb/superuser.json"
 
 mkdir -p "$APP" "$LOGS" "$(dirname "$KEY")"
-cp "$SRC/goku_backup.py" "$APP/"
-[ -f "$KEY" ] || { touch "$KEY"; }
-chmod 700 "$(dirname "$KEY")"; chmod 600 "$KEY"
+cp "$SRC/goku_backup.py" "$SRC/../tools/pb.py" "$APP/"
 
 cat > "$PLIST" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
@@ -35,4 +33,4 @@ if launchctl print "gui/$(id -u)/$LABEL" >/dev/null 2>&1; then
 fi
 launchctl bootstrap "gui/$(id -u)" "$PLIST"
 echo "Installé : tous les jours à 09:30 — journal : $LOGS/backup.log"
-[ -s "$KEY" ] || echo "⚠️  Il manque la clé secrète Supabase dans $KEY"
+[ -s "$KEY" ] || echo "⚠️  Il manque les identifiants superuser PocketBase dans $KEY"

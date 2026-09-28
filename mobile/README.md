@@ -27,8 +27,8 @@ Le projet Capacitor (node_modules, `android/`, builds Gradle) est généré dans
 `capacitor.config.json` et `build.sh`, qui à chaque build :
 
 1. copie `index.html` et `logo.png` dans `www/` ;
-2. remplace le SDK Supabase du CDN unpkg par une copie embarquée (`www/supabase.js`, même
-   version) pour que l'app démarre même si le réseau n'est pas encore prêt ;
+2. autorise le HTTP uniquement vers l'IP Tailscale du Mac mini (base :8092, serveur IA :8787) ;
+   `capacitor.config.json` autorise le contenu mixte pour afficher les images de la base ;
 3. ajoute la permission `CAMERA` (scanner) et génère l'icône à partir de `logo.png` ;
 4. `cap sync` puis `gradlew assembleDebug`.
 

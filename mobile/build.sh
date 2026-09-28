@@ -33,12 +33,6 @@ cp "$REPO/index.html" "$REPO/logo.png" "$WS/www/"
 cd "$WS"
 npm install --no-audit --no-fund --loglevel=error
 
-# SDK Supabase embarqué dans l'APK (même version que le CDN d'index.html) : l'app ne dépend
-# plus d'unpkg au démarrage, qui peut échouer si le réseau n'est pas encore prêt.
-cp node_modules/@supabase/supabase-js/dist/umd/supabase.js www/supabase.js
-perl -pi -e 's#https://unpkg.com/\@supabase/supabase-js\@[0-9.]+#supabase.js#' www/index.html
-grep -q '<script src="supabase.js">' www/index.html || { echo "Remplacement du SDK Supabase échoué"; exit 1; }
-
 [ -d android ] || npx cap add android
 
 # Appareil photo pour le scanner (champ <input capture>).
@@ -46,7 +40,7 @@ MANIFEST=android/app/src/main/AndroidManifest.xml
 grep -q 'android.permission.CAMERA' "$MANIFEST" || \
   perl -0pi -e 's#</manifest>#    <uses-permission android:name="android.permission.CAMERA" />\n</manifest>#' "$MANIFEST"
 
-# HTTP autorisé uniquement vers l'IP Tailscale du Mac mini (serveur IA, voir AI_SERVER_URL).
+# HTTP autorisé uniquement vers l'IP Tailscale du Mac mini (base PocketBase :8092 et serveur IA :8787).
 mkdir -p android/app/src/main/res/xml
 cat > android/app/src/main/res/xml/network_security_config.xml <<'XML'
 <?xml version="1.0" encoding="utf-8"?>

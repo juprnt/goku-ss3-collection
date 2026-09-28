@@ -1,8 +1,8 @@
 """Serveur IA local pour Goku SS3 Collection.
 
-Tourne sur le Mac mini, à côté d'Ollama. L'app (web ou Android) l'appelle avec le
-jeton Supabase de l'utilisateur connecté ; le serveur lit Supabase *avec ce jeton*,
-donc les policies RLS s'appliquent exactement comme dans l'app.
+Tourne sur le Mac mini, à côté d'Ollama. L'app l'appelle avec le jeton PocketBase de
+l'utilisateur connecté ; le serveur lit la base (PocketBase, Mac mini) *avec ce jeton*,
+donc les règles d'accès s'appliquent exactement comme dans l'app.
 
 Endpoints :
   GET  /health    — état d'Ollama et du modèle
@@ -34,8 +34,7 @@ load_dotenv(Path(__file__).parent / ".env")
 
 OLLAMA_URL = os.getenv("OLLAMA_URL", "http://127.0.0.1:11434").rstrip("/")
 OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "qwen3.6:35b-mlx")
-SUPABASE_URL = os.getenv("SUPABASE_URL", "").rstrip("/")
-SUPABASE_ANON_KEY = os.getenv("SUPABASE_ANON_KEY", "")
+PB_URL = os.getenv("PB_URL", "http://127.0.0.1:8092").rstrip("/")
 ALLOWED_ORIGINS = [o.strip() for o in os.getenv("ALLOWED_ORIGINS", "").split(",") if o.strip()]
 
 GAMES = {
@@ -62,43 +61,44 @@ app.add_middleware(
 http = httpx.AsyncClient(timeout=httpx.Timeout(300, connect=10))
 
 
-# ---------------------------------------------------------------- Auth / Supabase
+# ---------------------------------------------------------------- Auth / PocketBase (Mac mini)
 
 _user_cache: dict[str, tuple[float, dict]] = {}
 
 
 async def current_user(authorization: str = Header(default="")) -> dict:
-    """Valide le jeton Supabase auprès de Supabase Auth (résultat mis en cache 5 min)."""
+    """Valide le jeton PocketBase de l'utilisateur (résultat mis en cache 5 min)."""
     token = authorization.removeprefix("Bearer ").strip()
     if not token:
-        raise HTTPException(401, "Jeton Supabase manquant (en-tête Authorization: Bearer ...)")
+        raise HTTPException(401, "Jeton manquant (en-tête Authorization: Bearer ...)")
     key = hashlib.sha256(token.encode()).hexdigest()
     cached = _user_cache.get(key)
     if cached and cached[0] > time.time():
         return cached[1]
     try:
-        r = await http.get(
-            f"{SUPABASE_URL}/auth/v1/user",
-            headers={"apikey": SUPABASE_ANON_KEY, "Authorization": f"Bearer {token}"},
-        )
+        r = await http.post(f"{PB_URL}/api/collections/users/auth-refresh", headers={"Authorization": token})
     except httpx.HTTPError as e:
-        raise HTTPException(503, f"Supabase injoignable : {e}")
+        raise HTTPException(503, f"Base de données injoignable : {e}")
     if r.status_code != 200:
-        raise HTTPException(401, "Jeton Supabase invalide ou expiré")
-    user = {**r.json(), "_token": token}
+        raise HTTPException(401, "Jeton invalide ou expiré")
+    user = {**r.json()["record"], "_token": token}
     _user_cache[key] = (time.time() + USER_CACHE_TTL, user)
     return user
 
 
-async def sb_select(token: str, table: str, params: dict) -> list[dict]:
-    r = await http.get(
-        f"{SUPABASE_URL}/rest/v1/{table}",
-        params=params,
-        headers={"apikey": SUPABASE_ANON_KEY, "Authorization": f"Bearer {token}"},
-    )
-    if r.status_code != 200:
-        raise HTTPException(502, f"Erreur Supabase ({table}) : {r.text[:300]}")
-    return r.json()
+async def pb_list(token: str, collection: str, params: dict) -> list[dict]:
+    """Lit une collection avec le jeton de l'utilisateur : les règles d'accès s'appliquent comme dans l'app."""
+    out, page = [], 1
+    while True:
+        r = await http.get(f"{PB_URL}/api/collections/{collection}/records",
+                           params={"perPage": 500, "page": page, "skipTotal": 1, **params}, headers={"Authorization": token})
+        if r.status_code != 200:
+            raise HTTPException(502, f"Erreur base de données ({collection}) : {r.text[:300]}")
+        items = r.json()["items"]
+        out += items
+        if len(items) < 500:
+            return out
+        page += 1
 
 
 _catalogue_cache: tuple[float, list[dict]] = (0.0, [])
@@ -109,13 +109,15 @@ async def load_catalogue(token: str) -> list[dict]:
     global _catalogue_cache
     if _catalogue_cache[0] > time.time():
         return _catalogue_cache[1]
-    cards = await sb_select(token, "cards", {"select": "*", "review_status": "eq.confirmed"})
+    cards = await pb_list(token, "cards", {"filter": 'review_status = "confirmed"'})
     _catalogue_cache = (time.time() + CATALOGUE_CACHE_TTL, cards)
     return cards
 
 
 async def load_collection(token: str) -> list[dict]:
-    return await sb_select(token, "collection_items", {"select": "*,cards(*)"})
+    """Collection de l'utilisateur, avec la carte liée sous la clé « cards » (même forme qu'avec Supabase)."""
+    rows = await pb_list(token, "collection_items", {"expand": "card_id"})
+    return [{**i, "card_id": i.get("card_id") or None, "cards": (i.get("expand") or {}).get("card_id")} for i in rows]
 
 
 # ---------------------------------------------------------------- Ollama
@@ -447,4 +449,5 @@ async def search(req: SearchRequest, user: dict = Depends(current_user)):
 if __name__ == "__main__":
     import uvicorn
 
-    uvicorn.run(app, host="0.0.0.0", port=int(os.getenv("PORT", "8787")))
+    uvicorn.run(app, host=os.getenv("HOST", "127.0.0.1"),  # accès distant via tailscale serve
+                port=int(os.getenv("PORT", "8787")))

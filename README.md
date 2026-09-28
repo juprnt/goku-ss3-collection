@@ -12,17 +12,16 @@ automatiques, le tout piloté depuis un Mac mini.
 
 - **Frontend** : HTML + CSS + JavaScript vanilla, tout dans un seul fichier
   [`index.html`](./index.html). Aucune étape de build, aucun bundler.
-- **Backend** : [Supabase](https://supabase.com) (Postgres + Auth + Storage), projet
-  `vtdohksscretlbvhsgfo`, accédé côté client via le SDK
-  [`@supabase/supabase-js`](https://github.com/supabase/supabase-js) chargé depuis le
-  CDN unpkg (version épinglée, voir plus bas).
+- **Backend** : [PocketBase](https://pocketbase.io) sur le **Mac mini** depuis le 28/09/2026
+  (SQLite + fichiers, service `com.goku.pocketbase`, `~/Services/goku`), accessible uniquement
+  via Tailscale sur `http://100.109.190.30:8092`. Schéma : `backend/pb_migrations/`. L'ancien
+  projet Supabase (`vtdohksscretlbvhsgfo`) est en pause pendant 1 mois, puis à supprimer.
 - **Hébergement** : ~~Vercel~~ — abandonné le 23/09/2026 (projet mis en pause). L'app est
   distribuée comme APK Android construit par [`mobile/build.sh`](./mobile/build.sh) à partir
   de `index.html`. Un push sur `main` ne publie donc plus rien.
-- **Auth** : email/mot de passe via Supabase Auth. La clé utilisée côté client
-  (`SUPABASE_ANON_KEY`) est la clé publique anonyme — elle est censée être visible
-  côté client ; la sécurité réelle des données repose sur les policies RLS
-  (Row Level Security) configurées côté Supabase, pas sur le secret de cette clé.
+- **Auth** : email/mot de passe (collection `users` de PocketBase), pas d'inscription publique.
+  Mot de passe oublié : `python3 ~/Services/goku/tools/set_password.py` sur le Mac mini. Chaque
+  compte ne voit que ses propres données (règles d'accès PocketBase).
 
 ## Fichiers du dépôt
 
@@ -34,24 +33,27 @@ automatiques, le tout piloté depuis un Mac mini.
 | `DOCUMENTATION.md`   | Documentation détaillée (schéma de données, historique complet, déploiement). |
 | `ai-server/`         | Serveur IA local (Mac mini + Ollama) : reconnaissance de cartes et recherche en langage naturel ; `tools/` : revue et veille des cartes officielles Bandai. Voir [`ai-server/README.md`](./ai-server/README.md). |
 | `mobile/`            | App Android (Capacitor) : `build.sh` génère l'APK à partir de `index.html`. Voir [`mobile/README.md`](./mobile/README.md). |
-| `backup/`            | Maintien en éveil de Supabase + sauvegarde hebdomadaire dans iCloud (`goku_backup.py`, `install.sh`). |
+| `backend/`           | Base PocketBase : schéma (`pb_migrations/`), services launchd (base, synchro Cardmarket). Déployé par `deploy.sh`. |
+| `tools/`             | Outils Python de la base : client `pb.py`, synchro Cardmarket, import depuis Supabase, changement de mot de passe. |
+| `deploy.sh`          | Copie migrations / outils vers `~/Services/goku` et relance le service. |
+| `backup/`            | Sauvegarde hebdomadaire de la base dans iCloud (`goku_backup.py`, `install.sh`). |
 | `docs/`              | Charte graphique (`CHARTE.md`, « Sand, Teal, Gold & Navy », modes jour / nuit) et tâches préparées (`TASK-prix-cardmarket.md`, réalisée). |
 | `CLAUDE.md`          | Consignes pour les agents Claude Code qui travaillent sur ce dépôt. |
 
-## Tables Supabase utilisées
+## Collections de la base (PocketBase)
 
-- `public.cards` — catalogue de référence des cartes (une ligne = une carte connue,
+- `cards` — catalogue de référence des cartes (une ligne = une carte connue,
   toutes éditions confondues). Colonne `review_status` : `confirmed` (visible dans
   l'onglet Catalogue) ou `pending_review` (en attente de validation, onglet
-  "Cartes à valider"). 115 cartes confirmées + 1 à valider au 23/09/2026.
-- `public.games` / `public.game_sets` — hiérarchie Jeu → Extension utilisée pour
+  "Cartes à valider"). 130 cartes au 28/09/2026.
+- `games` / `game_sets` — hiérarchie Jeu → Extension utilisée pour
   regrouper l'affichage du catalogue. `game_sets.sort_order` reflète l'ordre
   chronologique réel de sortie de chaque extension (du plus ancien au plus récent).
-- `public.collection_items` — les cartes possédées / en wishlist par l'utilisateur
+- `collection_items` — les cartes possédées / en wishlist par l'utilisateur
   connecté (données personnelles).
-- `public.card_photos` — photos recto/verso associées à un `collection_item`,
-  stockées dans le bucket Storage privé `card-photos` (accès via URL signée).
-- `public.hidden_cards` — cartes du catalogue masquées par l'utilisateur.
+- `card_photos` — photos recto/verso associées à un `collection_item`,
+  fichier protégé `photo` (lu avec un jeton de fichier temporaire).
+- `hidden_cards` — cartes du catalogue masquées par l'utilisateur.
 
 **Ne jamais toucher `collection_items` ou `card_photos` en dehors d'une action
 explicite de l'utilisateur concerné** — ce sont des données personnelles.
@@ -60,8 +62,8 @@ explicite de l'utilisateur concerné** — ce sont des données personnelles.
 
 Un seul fichier, embarqué dans l'APK Android (`mobile/build.sh`). Au chargement :
 
-1. `checkSession()` vérifie si une session Supabase existe déjà (cookie/local
-   storage géré par le SDK) et connecte automatiquement l'utilisateur si oui.
+1. `checkSession()` rafraîchit le jeton PocketBase gardé dans `localStorage`
+   (`goku-pb-auth`) et connecte automatiquement l'utilisateur s'il est valide.
 2. Une fois connecté, `loadAll()` charge en parallèle (`Promise.all`) : le
    catalogue confirmé, la file de validation, la collection de l'utilisateur, les
    cartes masquées, la hiérarchie jeux/extensions et les prix Cardmarket — puis
@@ -81,9 +83,11 @@ via `getPhotoUrl()`, mise en cache côté client (voir section Optimisations).
 |---|---|---|
 | `com.goku.ai-server` + Ollama | en continu | Serveur IA (scanner, recherche) sur `https://macmini-de-juli1.tail13a987.ts.net` via Tailscale |
 | `com.goku.bandai-watch` | tous les jours 08:00 | Veille des nouvelles cartes Goku SS3 sur les bases officielles Bandai |
-| `com.goku.backup` | tous les jours 09:30 | Maintien en éveil de Supabase + sauvegarde hebdomadaire dans iCloud Drive/Sauvegardes/Goku SS3 |
+| `com.goku.pocketbase` | en continu | Base de données (PocketBase, port 8092, via Tailscale) |
+| `com.goku.cardmarket` | tous les jours 05:15 | Prix Cardmarket du jour (`tools/cardmarket_sync.py`) |
+| `com.goku.backup` | tous les jours 09:30 | Sauvegarde hebdomadaire de la base dans iCloud Drive/Sauvegardes/Goku SS3 |
 
-Détails : `DOCUMENTATION.md` §11 à §13.
+Détails : `DOCUMENTATION.md` §11 à §14.
 
 ## Période de test en cours
 
@@ -93,7 +97,7 @@ créer une entrée dans l'onglet **Issues** du dépôt GitHub
 (`github.com/juprnt/goku-ss3-collection/issues`) — ça garde un historique daté et
 évite de perdre le contexte d'une session à l'autre.
 
-## Historique des optimisations (23/08/2026)
+## Historique des optimisations (23/08/2026, époque Supabase)
 
 Une passe de nettoyage a été appliquée sur `index.html`. Résumé des changements,
 pour référence future :

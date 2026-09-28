@@ -7,7 +7,7 @@ Goku SS3 (web aujourd'hui, Android ensuite). Ce dossier est exclu du déploiemen
 ## Lancer
 
 ```bash
-cp .env.example .env   # puis renseigner SUPABASE_ANON_KEY (la même que dans index.html)
+cp .env.example .env   # PB_URL = base PocketBase du Mac mini (http://127.0.0.1:8092 par défaut)
 ./install.sh           # installe/met à jour le service qui démarre avec le Mac
 ```
 
@@ -38,9 +38,10 @@ L'environnement Python est créé dans `~/.local/share/goku-ai-server/venv`, hor
 
 ## Endpoints
 
-Tous (sauf `/health` et `/`) exigent `Authorization: Bearer <jeton Supabase de l'utilisateur>`.
-Le serveur n'a **aucune clé service_role** : il lit Supabase avec le jeton de l'utilisateur,
-donc les policies RLS s'appliquent comme dans l'app.
+Tous (sauf `/health` et `/`) exigent `Authorization: Bearer <jeton PocketBase de l'utilisateur>`.
+Le serveur n'a **aucun accès superuser** : il lit la base (PocketBase, Mac mini) avec le jeton de
+l'utilisateur, donc les règles d'accès s'appliquent comme dans l'app. Il écoute sur `127.0.0.1:8787`,
+exposé au tailnet par `tailscale serve`.
 
 | Méthode | Route       | Entrée                         | Sortie |
 |---------|-------------|--------------------------------|--------|
@@ -56,7 +57,7 @@ donc les policies RLS s'appliquent comme dans l'app.
   jeu = +10, similarité du nom jusqu'à +20, rareté = +5). `best_match_id` n'est renseigné
   que si le meilleur score ≥ 60 avec au moins 15 points d'avance.
 - **Recherche** : le modèle traduit la question en filtres JSON, appliqués ensuite en Python
-  sur les données Supabase — l'IA ne voit jamais les données elles-mêmes.
+  sur les données de la base — l'IA ne voit jamais les données elles-mêmes.
 - Les modèles MLX ne gèrent pas la sortie structurée d'Ollama : le serveur bascule
   automatiquement sur un schéma décrit dans le prompt et ré-valide la réponse.
 

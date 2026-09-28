@@ -369,22 +369,9 @@
       <input type="password" id="auth-password" placeholder="••••••••" autocomplete="current-password" />
       <div class="auth-toggle">
         <button class="primary" id="btn-signin" style="flex:1">Se connecter</button>
-        <button class="secondary" id="btn-signup" style="flex:1">Créer un compte</button>
       </div>
-      <button class="ghost" id="btn-forgot" style="width:100%;margin-top:8px;">Mot de passe oublié ?</button>
-    </div>
-    <div id="reset-form" class="hidden">
-      <p class="sub" id="reset-intro">Un code t'a été envoyé par e-mail. Saisis-le puis choisis ton nouveau mot de passe.</p>
-      <label>Code reçu par e-mail</label>
-      <input type="text" id="reset-code" inputmode="numeric" autocomplete="one-time-code" maxlength="10" placeholder="123456" />
-      <label>Nouveau mot de passe</label>
-      <input type="password" id="reset-password" placeholder="6 caractères minimum" autocomplete="new-password" />
-      <label>Confirmer le mot de passe</label>
-      <input type="password" id="reset-password-confirm" placeholder="••••••••" autocomplete="new-password" />
-      <div class="auth-toggle">
-        <button class="ghost" id="btn-reset-cancel" style="flex:1">Retour</button>
-        <button class="primary" id="btn-reset" style="flex:1">Enregistrer</button>
-      </div>
+      <p class="sub" style="margin:14px 0 0;font-size:12px;">Mot de passe oublié : sur le Mac mini, lance
+        <code>python3 ~/Services/goku/tools/set_password.py</code>.</p>
     </div>
     <div id="auth-msg"></div>
   </div>
@@ -605,11 +592,88 @@
 
 <div id="toast-container"></div>
 
-<script src="https://unpkg.com/@supabase/supabase-js@2.112.3"></script>
 <script>
-const SUPABASE_URL = "https://vtdohksscretlbvhsgfo.supabase.co";
-const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZ0ZG9oa3NzY3JldGxidmhzZ2ZvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODcxNDc4OTcsImV4cCI6MjEwMjcyMzg5N30.ougiP2EyKdNQc2_9EzbHsVx4v8JucLz1PJITfTe_ULg";
-const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+/* ---------- Base de données : PocketBase sur le Mac mini (depuis le 27/09/2026, remplace Supabase) ----------
+   App Android : IP Tailscale du Mac mini, en HTTP simple chiffré par le tunnel Tailscale
+   (« tailscale serve --tcp 8092 »), via le client HTTP natif (CapacitorHttp) comme le serveur IA :
+   pas de CORS ni de blocage « contenu mixte » du moteur web. Navigateur (tests) : PocketBase local. */
+const IS_NATIVE_APP = !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform());
+const PB_URL = IS_NATIVE_APP ? "http://100.109.190.30:8092" : (location.port === "8092" ? location.origin : "http://127.0.0.1:8092");
+const DB_OFFLINE_MSG = "Base de données injoignable : vérifie que Tailscale est activé sur ce téléphone et que le Mac mini est allumé.";
+const AUTH_KEY = "goku-pb-auth";
+let pbAuth = null;  // { token, record }
+try { pbAuth = JSON.parse(localStorage.getItem(AUTH_KEY) || "null"); } catch (e) {}
+function saveAuth(a) { pbAuth = a; try { a ? localStorage.setItem(AUTH_KEY, JSON.stringify(a)) : localStorage.removeItem(AUTH_KEY); } catch (e) {} }
+
+class DbError extends Error { constructor(msg, status) { super(msg); this.status = status; } }
+
+// Requête vers PocketBase. `form` : liste de { key, value } ou { key, file } pour un envoi de fichier.
+async function pbRequest(method, path, { body, params, form } = {}) {
+  const qs = params ? "?" + new URLSearchParams(Object.entries(params).filter(([, v]) => v !== undefined && v !== "")).toString() : "";
+  const headers = pbAuth ? { Authorization: pbAuth.token } : {};
+  let status, data;
+  try {
+    if (IS_NATIVE_APP) {
+      const req = { url: PB_URL + path + qs, method, headers, connectTimeout: 8000, readTimeout: 60000 };
+      if (form) {
+        req.dataType = "formData";
+        req.data = await Promise.all(form.map(async f => f.file
+          ? { key: f.key, type: "base64File", value: await blobToBase64(f.file), fileName: f.file.name || "photo.jpg", contentType: f.file.type || "image/jpeg" }
+          : { key: f.key, type: "string", value: String(f.value) }));
+      } else if (body !== undefined) {
+        req.headers = { ...headers, "Content-Type": "application/json" };
+        req.data = body;
+      }
+      const res = await window.Capacitor.Plugins.CapacitorHttp.request(req);
+      status = res.status;
+      data = typeof res.data === "string" ? (() => { try { return JSON.parse(res.data); } catch { return {}; } })() : res.data;
+    } else {
+      const opts = { method, headers: { ...headers } };
+      if (form) { const fd = new FormData(); form.forEach(f => fd.append(f.key, f.file || String(f.value))); opts.body = fd; }
+      else if (body !== undefined) { opts.headers["Content-Type"] = "application/json"; opts.body = JSON.stringify(body); }
+      const res = await fetch(PB_URL + path + qs, opts);
+      status = res.status;
+      data = res.status === 204 ? null : await res.json().catch(() => ({}));
+    }
+  } catch (e) {
+    throw new DbError(DB_OFFLINE_MSG, 0);
+  }
+  if (status >= 400) {
+    const detail = data && data.data && Object.values(data.data).map(v => v.message).filter(Boolean).join(" ");
+    throw new DbError((data && data.message) + (detail ? " (" + detail + ")" : ""), status);
+  }
+  return data;
+}
+
+const db = {
+  async list(coll, params = {}) {
+    const out = [];
+    for (let page = 1; ; page++) {
+      const r = await pbRequest("GET", `/api/collections/${coll}/records`, { params: { perPage: 500, page, skipTotal: 1, ...params } });
+      out.push(...r.items);
+      if (r.items.length < 500) return out;
+    }
+  },
+  create: (coll, body) => pbRequest("POST", `/api/collections/${coll}/records`, { body }),
+  update: (coll, id, body) => pbRequest("PATCH", `/api/collections/${coll}/records/${id}`, { body }),
+  remove: (coll, id) => pbRequest("DELETE", `/api/collections/${coll}/records/${id}`),
+  createForm: (coll, form) => pbRequest("POST", `/api/collections/${coll}/records`, { form }),
+};
+
+// Illustration d'une carte : fichier stocké dans la base (images reprises de Supabase), sinon URL officielle.
+function cardImg(c) {
+  if (!c) return "";
+  return c.image ? `${PB_URL}/api/files/cards/${c.id}/${encodeURIComponent(c.image)}` : (c.official_image_url || "");
+}
+
+function blobToBase64(blob) {
+  return new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onload = () => resolve(String(r.result).split(",")[1]);
+    r.onerror = reject;
+    r.readAsDataURL(blob);
+  });
+}
 
 let currentUser = null;
 let cardsCatalogue = [];   // confirmed catalogue rows only
@@ -617,6 +681,7 @@ let marketInfo = new Map(); // card_id -> ligne de la vue card_market_info (prix
 let cardsPendingReview = []; // review_status = 'pending_review' rows
 let collectionItems = [];  // full collection_items rows (joined with cards)
 let hiddenCardIds = new Set(); // card ids the current user has hidden from the catalogue
+let hiddenRecordIds = new Map(); // card_id -> id de la ligne hidden_cards
 let gamesList = [];        // public.games rows (top level of the hierarchy)
 let gameSetsList = [];     // public.game_sets rows (series/extension level)
 let editingItemId = null;  // null = create mode
@@ -631,26 +696,23 @@ function toast(msg, type = "") {
 }
 
 /* ---------- Auth ---------- */
-document.getElementById("btn-signin").onclick = () => doAuth("signin");
-document.getElementById("btn-signup").onclick = () => doAuth("signup");
-document.getElementById("btn-logout").onclick = async () => { await sb.auth.signOut(); location.reload(); };
+document.getElementById("btn-signin").onclick = doAuth;
+document.getElementById("auth-password").addEventListener("keydown", e => { if (e.key === "Enter") doAuth(); });
+document.getElementById("btn-logout").onclick = () => { saveAuth(null); location.reload(); };
 
-async function doAuth(mode) {
+async function doAuth() {
   const email = document.getElementById("auth-email").value.trim();
   const password = document.getElementById("auth-password").value;
   const msgEl = document.getElementById("auth-msg");
   msgEl.className = ""; msgEl.textContent = "";
   if (!email || !password) { msgEl.className = "err"; msgEl.textContent = "Renseigne email + mot de passe."; return; }
-
-  if (mode === "signup") {
-    const { data, error } = await sb.auth.signUp({ email, password });
-    if (error) { msgEl.className = "err"; msgEl.textContent = error.message; return; }
-    if (data.session) { await onLoggedIn(data.session.user); }
-    else { msgEl.className = "ok"; msgEl.textContent = "Compte créé. Vérifie tes emails pour confirmer, puis connecte-toi."; }
-  } else {
-    const { data, error } = await sb.auth.signInWithPassword({ email, password });
-    if (error) { msgEl.className = "err"; msgEl.textContent = error.message; return; }
-    await onLoggedIn(data.user);
+  try {
+    const r = await pbRequest("POST", "/api/collections/users/auth-with-password", { body: { identity: email, password } });
+    saveAuth({ token: r.token, record: r.record });
+    await onLoggedIn(r.record);
+  } catch (e) {
+    msgEl.className = "err";
+    msgEl.textContent = e.status === 400 ? "E-mail ou mot de passe incorrect." : e.message;
   }
 }
 
@@ -662,61 +724,20 @@ async function onLoggedIn(user) {
   await loadAll();
 }
 
+// Reprend la session enregistrée (jeton renouvelé à chaque ouverture). Mac mini injoignable :
+// on reste sur l'écran de connexion avec un message clair, sans effacer la session.
 async function checkSession() {
-  const { data } = await sb.auth.getSession();
-  if (data.session) { await onLoggedIn(data.session.user); }
+  if (!pbAuth) return;
+  try {
+    const r = await pbRequest("POST", "/api/collections/users/auth-refresh");
+    saveAuth({ token: r.token, record: r.record });
+    await onLoggedIn(r.record);
+  } catch (e) {
+    if (e.status === 401 || e.status === 403 || e.status === 404) saveAuth(null);
+    const msgEl = document.getElementById("auth-msg");
+    msgEl.className = "err"; msgEl.textContent = e.status ? "Session expirée, reconnecte-toi." : e.message;
+  }
 }
-
-/* ---------- Mot de passe oublié ----------
-   Réinitialisation par code : Supabase envoie un code dans l'e-mail (modèle « Reset Password »
-   contenant {{ .Token }}), saisi ici avec le nouveau mot de passe. Aucun lien à ouvrir : ça
-   fonctionne dans l'app Android sans dépendre d'un site web. */
-let resetEmail = null;
-
-document.getElementById("btn-forgot").onclick = async () => {
-  const email = document.getElementById("auth-email").value.trim();
-  const msgEl = document.getElementById("auth-msg");
-  if (!email) { msgEl.className = "err"; msgEl.textContent = "Renseigne ton email, puis clique à nouveau sur « Mot de passe oublié ? »."; return; }
-  const { error } = await sb.auth.resetPasswordForEmail(email);
-  if (error) { msgEl.className = "err"; msgEl.textContent = error.message; return; }
-  resetEmail = email;
-  msgEl.className = ""; msgEl.textContent = "";
-  document.getElementById("reset-intro").textContent = `Un code a été envoyé à ${email}. Saisis-le puis choisis ton nouveau mot de passe.`;
-  document.getElementById("login-form").classList.add("hidden");
-  document.getElementById("reset-form").classList.remove("hidden");
-  document.getElementById("reset-code").focus();
-};
-
-function closeResetForm() {
-  resetEmail = null;
-  ["reset-code", "reset-password", "reset-password-confirm"].forEach(id => document.getElementById(id).value = "");
-  document.getElementById("reset-form").classList.add("hidden");
-  document.getElementById("login-form").classList.remove("hidden");
-}
-
-document.getElementById("btn-reset-cancel").onclick = () => {
-  closeResetForm();
-  const msgEl = document.getElementById("auth-msg"); msgEl.className = ""; msgEl.textContent = "";
-};
-
-document.getElementById("btn-reset").onclick = async () => {
-  const token = document.getElementById("reset-code").value.replace(/\s/g, "");
-  const password = document.getElementById("reset-password").value;
-  const confirm = document.getElementById("reset-password-confirm").value;
-  const msgEl = document.getElementById("auth-msg");
-  msgEl.className = "err";
-  if (!/^\d{6,10}$/.test(token)) { msgEl.textContent = "Saisis le code à chiffres reçu par e-mail."; return; }
-  if (password.length < 6) { msgEl.textContent = "6 caractères minimum."; return; }
-  if (password !== confirm) { msgEl.textContent = "Les deux mots de passe ne correspondent pas."; return; }
-  const { error: otpError } = await sb.auth.verifyOtp({ email: resetEmail, token, type: "recovery" });
-  if (otpError) { msgEl.textContent = "Code invalide ou expiré. Redemande un code avec « Mot de passe oublié ? »."; return; }
-  const { data, error } = await sb.auth.updateUser({ password });
-  if (error) { msgEl.textContent = error.message; return; }
-  msgEl.className = ""; msgEl.textContent = "";
-  closeResetForm();
-  toast("Mot de passe mis à jour.", "ok");
-  await onLoggedIn(data.user);
-};
 
 /* ---------- Menu burger / sections ---------- */
 const appMenu = document.getElementById("app-menu");
@@ -794,17 +815,15 @@ async function loadAll() {
 }
 
 async function loadCatalogue() {
-  const { data, error } = await sb.from("cards").select("*").eq("review_status", "confirmed").order("game").order("set_name");
-  if (error) { toast("Erreur chargement catalogue: " + error.message, "err"); return; }
-  cardsCatalogue = data || [];
+  try { cardsCatalogue = await db.list("cards", { filter: 'review_status = "confirmed"', sort: "game,set_name" }); }
+  catch (e) { toast("Erreur chargement catalogue: " + e.message, "err"); }
 }
 
-// Prix et liens Cardmarket (mis à jour chaque nuit côté Supabase). Non bloquant : sans ces
-// données, l'app fonctionne normalement, simplement sans prix.
+// Prix et liens Cardmarket (mis à jour chaque nuit sur le Mac mini par tools/cardmarket_sync.py).
+// Non bloquant : sans ces données, l'app fonctionne normalement, simplement sans prix.
 async function loadMarketInfo() {
-  const { data, error } = await sb.from("card_market_info").select("*");
-  if (error) { console.warn("Prix Cardmarket indisponibles:", error.message); return; }
-  marketInfo = new Map((data || []).map(r => [r.card_id, r]));
+  try { marketInfo = new Map((await db.list("card_market_info")).map(r => [r.card_id, r.info || {}])); }
+  catch (e) { console.warn("Prix Cardmarket indisponibles:", e.message); }
 }
 
 function marketPrice(cardId) {
@@ -845,42 +864,41 @@ function marketHtml(cardId, vintedCard = null) {
 
 async function loadHiddenCards() {
   if (!currentUser) { hiddenCardIds = new Set(); return; }
-  const { data, error } = await sb.from("hidden_cards").select("card_id").eq("user_id", currentUser.id);
-  if (error) { toast("Erreur chargement cartes masquées: " + error.message, "err"); return; }
-  hiddenCardIds = new Set((data || []).map(r => r.card_id));
+  try {
+    const rows = await db.list("hidden_cards", { fields: "id,card_id" });
+    hiddenRecordIds = new Map(rows.map(r => [r.card_id, r.id]));
+    hiddenCardIds = new Set(hiddenRecordIds.keys());
+  } catch (e) { toast("Erreur chargement cartes masquées: " + e.message, "err"); }
 }
 
 async function hideCard(cardId) {
-  const { error } = await sb.from("hidden_cards").insert({ user_id: currentUser.id, card_id: cardId });
-  if (error) { toast("Erreur: " + error.message, "err"); return; }
+  try {
+    const r = await db.create("hidden_cards", { user_id: currentUser.id, card_id: cardId });
+    hiddenRecordIds.set(cardId, r.id);
+  } catch (e) { toast("Erreur: " + e.message, "err"); return; }
   hiddenCardIds.add(cardId);
   toast("Carte masquée. Tu peux la ré-afficher via \"Afficher les cartes masquées\".", "ok");
   renderCatalogueGrid();
 }
 
 async function unhideCard(cardId) {
-  const { error } = await sb.from("hidden_cards").delete().eq("user_id", currentUser.id).eq("card_id", cardId);
-  if (error) { toast("Erreur: " + error.message, "err"); return; }
+  try { if (hiddenRecordIds.has(cardId)) await db.remove("hidden_cards", hiddenRecordIds.get(cardId)); }
+  catch (e) { toast("Erreur: " + e.message, "err"); return; }
+  hiddenRecordIds.delete(cardId);
   hiddenCardIds.delete(cardId);
   toast("Carte réaffichée dans le catalogue.", "ok");
   renderCatalogueGrid();
 }
 
 async function loadGamesHierarchy() {
-  const [gamesRes, setsRes] = await Promise.all([
-    sb.from("games").select("*").order("sort_order"),
-    sb.from("game_sets").select("*").order("sort_order"),
-  ]);
-  if (gamesRes.error) { toast("Erreur chargement jeux: " + gamesRes.error.message, "err"); return; }
-  if (setsRes.error) { toast("Erreur chargement extensions: " + setsRes.error.message, "err"); return; }
-  gamesList = gamesRes.data || [];
-  gameSetsList = setsRes.data || [];
+  try {
+    [gamesList, gameSetsList] = await Promise.all([db.list("games", { sort: "sort_order" }), db.list("game_sets", { sort: "sort_order" })]);
+  } catch (e) { toast("Erreur chargement jeux / extensions: " + e.message, "err"); }
 }
 
 async function loadPendingReview() {
-  const { data, error } = await sb.from("cards").select("*").eq("review_status", "pending_review").order("game").order("set_name");
-  if (error) { toast("Erreur chargement file de validation: " + error.message, "err"); return; }
-  cardsPendingReview = data || [];
+  try { cardsPendingReview = await db.list("cards", { filter: 'review_status = "pending_review"', sort: "game,set_name" }); }
+  catch (e) { toast("Erreur chargement file de validation: " + e.message, "err"); return; }
   const badge = document.getElementById("review-badge");
   if (cardsPendingReview.length > 0) {
     badge.textContent = cardsPendingReview.length;
@@ -893,12 +911,15 @@ async function loadPendingReview() {
 }
 
 async function loadCollection() {
-  const { data, error } = await sb
-    .from("collection_items")
-    .select("*, cards(*), card_photos(*)")
-    .order("created_at", { ascending: false });
-  if (error) { toast("Erreur chargement collection: " + error.message, "err"); return; }
-  collectionItems = data || [];
+  try {
+    const rows = await db.list("collection_items", { sort: "-created_at", expand: "card_id,card_photos_via_collection_item_id" });
+    // Même forme qu'avant (Supabase) : item.cards = la carte liée, item.card_photos = ses photos.
+    collectionItems = rows.map(i => ({
+      ...i, card_id: i.card_id || null,
+      cards: (i.expand && i.expand.card_id) || null,
+      card_photos: (i.expand && i.expand.card_photos_via_collection_item_id) || [],
+    }));
+  } catch (e) { toast("Erreur chargement collection: " + e.message, "err"); }
 }
 
 function displayName(item) {
@@ -1095,20 +1116,17 @@ function populateCardSelect() {
     cardsCatalogue.map(c => `<option value="${c.id}">${escapeHtml(gameDisplayName(c.game_slug))} — ${escapeHtml(c.card_name)}${c.card_number ? " (" + escapeHtml(c.card_number) + ")" : ""}</option>`).join("");
 }
 
-/* ---------- Photo URL cache ----------
-   Signed URLs are valid 3600s server-side; we cache them client-side for slightly
-   less than that so repeated renders (search/filter/tab switches) don't re-hit
-   Supabase Storage for photos that haven't changed. */
-const PHOTO_URL_TTL_MS = 3000 * 1000;
-const photoUrlCache = new Map(); // storage_path -> { url, expiresAt }
-
-async function getPhotoUrl(path) {
-  const cached = photoUrlCache.get(path);
-  if (cached && cached.expiresAt > Date.now()) return cached.url;
-  const { data, error } = await sb.storage.from("card-photos").createSignedUrl(path, 3600);
-  if (error) return null;
-  photoUrlCache.set(path, { url: data.signedUrl, expiresAt: Date.now() + PHOTO_URL_TTL_MS });
-  return data.signedUrl;
+/* ---------- Photos (fichiers protégés PocketBase : URL avec un jeton de fichier de courte durée) ---------- */
+let fileToken = null, fileTokenAt = 0;
+async function getPhotoUrl(photo) {
+  if (!photo || !photo.photo) return null;
+  try {
+    if (!fileToken || Date.now() - fileTokenAt > 100 * 1000) {  // jeton PocketBase valable ~2 min
+      fileToken = (await pbRequest("POST", "/api/files/token")).token;
+      fileTokenAt = Date.now();
+    }
+  } catch (e) { return null; }
+  return `${PB_URL}/api/files/card_photos/${photo.id}/${encodeURIComponent(photo.photo)}?token=${fileToken}`;
 }
 
 /* ---------- Render grids ---------- */
@@ -1141,7 +1159,7 @@ async function renderGrid(containerId, items, isCollectionItem, mode = "recent")
   // awaiting them one item at a time, which used to serialize N network round-trips.
   const photoUrls = await Promise.all(items.map(item =>
     (item.card_photos && item.card_photos.length > 0)
-      ? getPhotoUrl(item.card_photos[0].storage_path)
+      ? getPhotoUrl(item.card_photos.find(p => p.side === "front") || item.card_photos[0])
       : Promise.resolve(null)
   ));
 
@@ -1193,7 +1211,7 @@ function cardTileHtml(c, owned, isHidden) {
   if (c.card_number) metaParts.push(c.card_number);
   return `
       <div class="card-tile${isHidden ? " hidden-card" : ""}">
-      <div class="thumb">${thumbHtml(c.official_image_url)}</div>
+      <div class="thumb">${thumbHtml(cardImg(c))}</div>
       <div class="info">
         <div class="title">${escapeHtml(c.card_name)}</div>
         <div class="meta">${escapeHtml(metaParts.join(" · "))}</div>
@@ -1273,7 +1291,7 @@ function renderReviewGrid() {
     const tile = document.createElement("div");
     tile.className = "card-tile";
     tile.innerHTML = `
-      <div class="thumb">${thumbHtml(c.official_image_url)}</div>
+      <div class="thumb">${thumbHtml(cardImg(c))}</div>
       <div class="info">
         <div class="title">${escapeHtml(c.card_name)}</div>
         <div class="meta">${escapeHtml(c.game)}${c.set_name ? " · " + escapeHtml(c.set_name) : ""}${c.card_number ? " · " + escapeHtml(c.card_number) : ""}</div>
@@ -1297,16 +1315,16 @@ function renderReviewGrid() {
 }
 
 async function approveReviewCard(cardId) {
-  const { error } = await sb.from("cards").update({ review_status: "confirmed" }).eq("id", cardId);
-  if (error) { toast("Erreur: " + error.message, "err"); return; }
+  try { await db.update("cards", cardId, { review_status: "confirmed" }); }
+  catch (e) { toast("Erreur: " + e.message, "err"); return; }
   toast("Carte validée et ajoutée au catalogue.", "ok");
   await loadAll();
 }
 
 async function rejectReviewCard(cardId) {
   if (!confirm("Rejeter (supprimer) cette carte ? Cette action est définitive.")) return;
-  const { error } = await sb.from("cards").delete().eq("id", cardId);
-  if (error) { toast("Erreur: " + error.message, "err"); return; }
+  try { await db.remove("cards", cardId); }
+  catch (e) { toast("Erreur: " + e.message, "err"); return; }
   toast("Carte rejetée et supprimée.", "ok");
   await loadAll();
 }
@@ -1392,8 +1410,8 @@ function openModal(itemId, presetCardId, presetStatus) {
   document.getElementById("f-quantity").value = item ? item.quantity : 1;
   document.getElementById("f-condition").value = item ? (item.condition || "") : "";
   document.getElementById("f-language").value = item ? (item.language_override || "") : "";
-  document.getElementById("f-price-paid").value = item ? (item.price_paid ?? "") : "";
-  document.getElementById("f-estimated-value").value = item ? (item.estimated_value ?? "") : "";
+  document.getElementById("f-price-paid").value = item && item.price_paid ? item.price_paid : "";
+  document.getElementById("f-estimated-value").value = item && item.estimated_value ? item.estimated_value : "";
   document.getElementById("f-acquired-date").value = item ? (item.acquired_date || "") : "";
   document.getElementById("f-grading").value = item && item.grading_company ? `${item.grading_company} ${item.grading_score || ""}`.trim() : "";
   document.getElementById("f-notes").value = item ? (item.notes || "") : "";
@@ -1401,8 +1419,8 @@ function openModal(itemId, presetCardId, presetStatus) {
   if (item && item.card_photos) {
     const front = item.card_photos.find(p => p.side === "front");
     const back = item.card_photos.find(p => p.side === "back");
-    if (front) getPhotoUrl(front.storage_path).then(url => { if (url) document.getElementById("preview-front").innerHTML = `<img src="${url}"/>`; });
-    if (back) getPhotoUrl(back.storage_path).then(url => { if (url) document.getElementById("preview-back").innerHTML = `<img src="${url}"/>`; });
+    if (front) getPhotoUrl(front).then(url => { if (url) document.getElementById("preview-front").innerHTML = `<img src="${url}"/>`; });
+    if (back) getPhotoUrl(back).then(url => { if (url) document.getElementById("preview-back").innerHTML = `<img src="${url}"/>`; });
   }
 
   overlay.classList.remove("hidden");
@@ -1464,14 +1482,8 @@ async function saveItem() {
     };
 
     let itemId = editingItemId;
-    if (itemId) {
-      const { error } = await sb.from("collection_items").update(payload).eq("id", itemId);
-      if (error) throw error;
-    } else {
-      const { data, error } = await sb.from("collection_items").insert(payload).select().single();
-      if (error) throw error;
-      itemId = data.id;
-    }
+    if (itemId) await db.update("collection_items", itemId, payload);
+    else itemId = (await db.create("collection_items", { ...payload, currency: "EUR" })).id;
 
     if (pendingPhotoFront) await uploadPhoto(itemId, pendingPhotoFront, "front");
     if (pendingPhotoBack) await uploadPhoto(itemId, pendingPhotoBack, "back");
@@ -1488,20 +1500,23 @@ async function saveItem() {
 }
 
 async function uploadPhoto(itemId, file, side) {
-  const path = `${currentUser.id}/${itemId}/${side}-${Date.now()}.${file.name.split(".").pop()}`;
-  const { error: upErr } = await sb.storage.from("card-photos").upload(path, file, { upsert: true });
-  if (upErr) { toast("Erreur upload photo: " + upErr.message, "err"); return; }
-  const { error: dbErr } = await sb.from("card_photos").insert({
-    collection_item_id: itemId, user_id: currentUser.id, storage_path: path, side
-  });
-  if (dbErr) toast("Erreur enregistrement photo: " + dbErr.message, "err");
+  try {
+    // Une seule photo par face : l'ancienne est remplacée.
+    const item = collectionItems.find(i => i.id === itemId);
+    const old = item && item.card_photos.find(p => p.side === side);
+    await db.createForm("card_photos", [
+      { key: "collection_item_id", value: itemId }, { key: "user_id", value: currentUser.id },
+      { key: "side", value: side }, { key: "photo", file },
+    ]);
+    if (old) await db.remove("card_photos", old.id);
+  } catch (e) { toast("Erreur enregistrement photo: " + e.message, "err"); }
 }
 
 async function deleteItem() {
   if (!editingItemId) return;
   if (!confirm("Supprimer cette carte de la collection ?")) return;
-  const { error } = await sb.from("collection_items").delete().eq("id", editingItemId);
-  if (error) { toast("Erreur: " + error.message, "err"); return; }
+  try { await db.remove("collection_items", editingItemId); }
+  catch (e) { toast("Erreur: " + e.message, "err"); return; }
   toast("Carte supprimée.", "ok");
   closeModal();
   await loadAll();
@@ -1522,9 +1537,6 @@ const AI_SERVER_URL = (window.Capacitor && window.Capacitor.isNativePlatform && 
   : "https://macmini-de-juli1.tail13a987.ts.net";
 const AI_OFFLINE_MSG = "Serveur IA injoignable : vérifie que Tailscale est activé sur ce téléphone et que le Mac mini est allumé.";
 let aiScanFile = null;
-// Dans l'app Android (Capacitor), les appels passent par le client HTTP natif :
-// pas de CORS ni de blocage "réseau privé" du moteur web.
-const IS_NATIVE_APP = !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform());
 
 async function nativeAiRequest(path, { method = "GET", json, token, timeoutMs = 180000 } = {}) {
   let res;
@@ -1552,20 +1564,10 @@ async function shrinkPhoto(file, maxSide = 1600) {
   return await new Promise(resolve => canvas.toBlob(resolve, "image/jpeg", 0.88));
 }
 
-function blobToBase64(blob) {
-  return new Promise((resolve, reject) => {
-    const r = new FileReader();
-    r.onload = () => resolve(String(r.result).split(",")[1]);
-    r.onerror = reject;
-    r.readAsDataURL(blob);
-  });
-}
-
 async function aiFetch(path, opts = {}, timeoutMs = 180000) {
-  const { data } = await sb.auth.getSession();
-  if (!data.session) throw new Error("Session expirée, reconnecte-toi.");
+  if (!pbAuth) throw new Error("Session expirée, reconnecte-toi.");
   if (IS_NATIVE_APP) {
-    return nativeAiRequest(path, { method: opts.method, json: opts.json, token: data.session.access_token, timeoutMs });
+    return nativeAiRequest(path, { method: opts.method, json: opts.json, token: pbAuth.token, timeoutMs });
   }
   if (opts.json) {
     opts = { ...opts, body: JSON.stringify(opts.json), headers: { ...(opts.headers || {}), "Content-Type": "application/json" } };
@@ -1577,7 +1579,7 @@ async function aiFetch(path, opts = {}, timeoutMs = 180000) {
   try {
     res = await fetch(AI_SERVER_URL + path, {
       ...opts, signal: ctrl.signal,
-      headers: { ...(opts.headers || {}), Authorization: "Bearer " + data.session.access_token },
+      headers: { ...(opts.headers || {}), Authorization: "Bearer " + pbAuth.token },
     });
   } catch (e) {
     throw new Error(e.name === "AbortError" ? "Le serveur IA met trop de temps à répondre." : AI_OFFLINE_MSG);
@@ -1617,7 +1619,7 @@ function aiCardRowHtml(c, { best = false, note = "" } = {}) {
   const meta = [gameDisplayName(c.game_slug), c.set_name, c.card_number].filter(Boolean).join(" · ");
   return `
     <div class="ai-row${best ? " best" : ""}">
-      ${c.official_image_url ? `<img src="${escapeHtml(c.official_image_url)}" loading="lazy" alt="" />` : `<div class="noimg"></div>`}
+      ${cardImg(c) ? `<img src="${escapeHtml(cardImg(c))}" loading="lazy" alt="" />` : `<div class="noimg"></div>`}
       <div class="txt">
         <strong>${escapeHtml(c.card_name)}</strong>
         <div class="meta">${escapeHtml(meta)}</div>
@@ -1706,7 +1708,7 @@ async function runAiSearch() {
       const meta = [gameDisplayName(c.game_slug), c.set_name, c.card_number].filter(Boolean).join(" · ");
       return `
         <div class="ai-row">
-          ${c.official_image_url ? `<img src="${escapeHtml(c.official_image_url)}" loading="lazy" alt="" />` : `<div class="noimg"></div>`}
+          ${cardImg(c) ? `<img src="${escapeHtml(cardImg(c))}" loading="lazy" alt="" />` : `<div class="noimg"></div>`}
           <div class="txt">
             <strong>${escapeHtml(displayName(item))}</strong>
             <div class="meta">${escapeHtml(meta)}</div>
