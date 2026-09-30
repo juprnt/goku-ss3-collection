@@ -211,3 +211,9 @@ Lien `https://www.vinted.fr/catalog?search_text=…` sur les cartes manquantes (
 - **App** : `PB_URL` = `http://100.109.190.30:8092` dans l'APK ; dans un navigateur, l'origine si la page est servie sur le port 8092, sinon `http://127.0.0.1:8092`. `mobile/capacitor.config.json` autorise le contenu mixte (images HTTP du Mac mini dans la WebView HTTPS).
 - **Supabase** : projet mis en pause, gardé 1 mois, puis à supprimer.
 
+## 15. Illustrations (30/09/2026, v1.2)
+
+- **Toutes les illustrations du catalogue sont hébergées sur le Mac mini** (champ `cards.image`) : les 71 images qui pointaient encore vers des sites externes (dbs-cardgame.com, dbscards.fr, dotgg, dbzcollection) ont été copiées. 5 images Cardmarket bloquées (403 : ST01-044, FB02-051, FS11-07, SB02-023, FB05-119) remplacées par les images officielles Bandai. `official_image_url` garde la source.
+- La veille Bandai copie aussi l'illustration de chaque nouvelle carte (`Base.store_image` dans `watch_bandai.py`).
+- **Photo par défaut** : une carte de la collection / wishlist sans photo perso affiche l'illustration du catalogue (tuiles et recto de la fenêtre d'ajout, mention « Illustration du catalogue »). Rien n'est téléversé : dès qu'une photo perso est ajoutée, elle la remplace.
+

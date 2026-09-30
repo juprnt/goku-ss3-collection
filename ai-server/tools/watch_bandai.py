@@ -119,7 +119,22 @@ class Base:
                 continue
             r.raise_for_status()
             n += 1
+            if row.get("official_image_url"):
+                await self.store_image(r.json()["id"], collection, row["official_image_url"])
         return n
+
+    async def store_image(self, rid: str, collection: str, url: str):
+        """Copie l'illustration sur le Mac mini (champ `image`) : l'app ne dépend plus du site Bandai."""
+        try:
+            img = await self.http.get(url)
+            img.raise_for_status()
+            name = url.rsplit("/", 1)[-1].split("?")[0]
+            ctype = img.headers.get("content-type", "image/webp").split(";")[0]
+            r = await self.http.patch(f"{self.url}/api/collections/{collection}/records/{rid}", headers=self.h,
+                                      files={"image": (name, img.content, ctype)})
+            r.raise_for_status()
+        except httpx.HTTPError as e:
+            log(f"Illustration non copiée ({url}) : {e}")
 
 
 # ------------------------------------------------------------------ Masters
