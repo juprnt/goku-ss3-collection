@@ -627,6 +627,51 @@ function saveAuth(a) { pbAuth = a; try { a ? localStorage.setItem(AUTH_KEY, JSON
 class DbError extends Error { constructor(msg, status) { super(msg); this.status = status; } }
 
 // Requête vers PocketBase. `form` : liste de { key, value } ou { key, file } pour un envoi de fichier.
+/* Images de la base dans l'APK : la WebView (page en https://localhost) bloque les images en
+   http:// venant du Mac mini. On les télécharge donc par le client HTTP natif, comme l'API, et on
+   remplace le src par une URL blob locale (mise en cache pour la session). */
+if (IS_NATIVE_APP) {
+  const pbImgCache = new Map();
+  let pbImgActive = 0;
+  const pbImgQueue = [];
+  const pbImgNext = () => {
+    while (pbImgActive < 6 && pbImgQueue.length) {
+      const job = pbImgQueue.shift();
+      pbImgActive++;
+      window.Capacitor.Plugins.CapacitorHttp.request({ url: job.url, method: "GET", responseType: "blob", connectTimeout: 8000, readTimeout: 60000 })
+        .then(res => {
+          if (res.status !== 200) throw new Error("HTTP " + res.status);
+          const bin = atob(String(res.data).replace(/^data:[^,]*,/, ""));
+          const bytes = new Uint8Array(bin.length);
+          for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+          const type = (res.headers && (res.headers["Content-Type"] || res.headers["content-type"])) || "image/jpeg";
+          job.resolve(URL.createObjectURL(new Blob([bytes], { type })));
+        })
+        .catch(e => { pbImgCache.delete(job.url); job.reject(e); })
+        .finally(() => { pbImgActive--; pbImgNext(); });
+    }
+  };
+  const pbImgBlob = url => {
+    if (!pbImgCache.has(url)) pbImgCache.set(url, new Promise((resolve, reject) => { pbImgQueue.push({ url, resolve, reject }); pbImgNext(); }));
+    return pbImgCache.get(url);
+  };
+  const pbImgFix = img => {
+    const src = img.getAttribute("src");
+    if (!src || !src.startsWith(PB_URL)) return;
+    img.removeAttribute("src");
+    img.dataset.pbSrc = src;
+    pbImgBlob(src).then(u => { if (img.dataset.pbSrc === src) img.src = u; }).catch(() => {});
+  };
+  const pbImgScan = node => {
+    if (node.nodeType !== 1) return;
+    if (node.tagName === "IMG") pbImgFix(node); else node.querySelectorAll("img[src]").forEach(pbImgFix);
+  };
+  new MutationObserver(muts => muts.forEach(m => {
+    if (m.type === "attributes") pbImgFix(m.target); else m.addedNodes.forEach(pbImgScan);
+  })).observe(document.documentElement, { childList: true, subtree: true, attributes: true, attributeFilter: ["src"] });
+  document.addEventListener("DOMContentLoaded", () => pbImgScan(document.body));
+}
+
 async function pbRequest(method, path, { body, params, form } = {}) {
   const qs = params ? "?" + new URLSearchParams(Object.entries(params).filter(([, v]) => v !== undefined && v !== "")).toString() : "";
   const headers = pbAuth ? { Authorization: pbAuth.token } : {};
